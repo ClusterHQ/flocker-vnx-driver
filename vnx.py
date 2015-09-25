@@ -255,7 +255,8 @@ class VnxiSCSIDriver():
                                    'password']
                 # delete the initiator to create a new one with password
                 if not chap_passwd:
-                    Message.new(Info='initiator has no password while using chap removing it')
+                    Message.new(Info='initiator has no password while using \
+                        chap removing it')
                     self.mgmt.request('initiators', 'DELETE', name=initiator)
                     # check if the initiator already exists
                     raise DeviceExceptionObjNotFound
@@ -277,18 +278,20 @@ class VnxiSCSIDriver():
     def create_lun_map(self, blockdevice_id, compute_instance_id):
         """
         :param: volume id or blockdevice_id passed from flocker
-        :param: hostname, we use hostname as initiator group's name. If hostname is not current host, things won't
-        break
+        :param: hostname, we use hostname as initiator group's name.
+            If hostname is not current host, things won't break
         :return: none
         :exception: Unknown volume, if volume not found
         """
         try:
-            self.mgmt.request('lun-maps', 'POST', {'ig-id': compute_instance_id,
-                                                   "vol-id": str(blockdevice_id)})
+            self.mgmt.request('lun-maps', 'POST',
+                              {'ig-id': compute_instance_id,
+                               "vol-id": str(blockdevice_id)})
         except DeviceExceptionObjNotFound:
             Message.new(Error="Could not attach volume"
                               + str(blockdevice_id)
-                              + "for node " + str(compute_instance_id)).write(_logger)
+                              + "for node "
+                              + str(compute_instance_id)).write(_logger)
             raise UnknownVolume(blockdevice_id)
 
     def destroy_lun_map(self, blockdevice_id, compute_instance_id):
@@ -299,11 +302,14 @@ class VnxiSCSIDriver():
         :exception: Unknown volume if volume is not found
         """
         try:
-            ig = self.mgmt.request('initiator-groups', name=compute_instance_id)['content']
+            ig = self.mgmt.request('initiator-groups',
+                                   name=compute_instance_id)['content']
             tg = self.mgmt.request('target-groups', name="Default")['content']
-            vol = self.mgmt.request('volumes', name=str(blockdevice_id))['content']
+            vol = self.mgmt.request('volumes',
+                                    name=str(blockdevice_id))['content']
             lm_name = '%s_%s_%s' % (str(vol['index']),
-                                    str(ig['index']) if ig else 'any', str(tg['index']))
+                                    str(ig['index']) if ig else 'any',
+                                    str(tg['index']))
             Message.new(lm_name=lm_name).write(_logger)
             self.mgmt.request('lun-maps', 'DELETE', name=lm_name)
         except DeviceExceptionObjNotFound:
@@ -319,7 +325,8 @@ class VnxiSCSIDriver():
         :exception: Volume unattached, if no mapping was found
         """
         try:
-            vol = self.mgmt.request('volumes', name=str(blockdevice_id))['content']
+            vol = self.mgmt.request('volumes',
+                                    name=str(blockdevice_id))['content']
             if int(vol['num-of-lun-mappings']) == 0:
                 raise UnattachedVolume(blockdevice_id)
             else:
@@ -343,7 +350,8 @@ class VnxiSCSIDriver():
         channel_number = self._get_channel_number()
         # Check for error condition
         if channel_number < 0:
-            Message.new(error="iSCSI login not done for VNX bailing out").write(_logger)
+            Message.new(error="iSCSI login not done for VNX bailing out") \
+                   .write(_logger)
             raise DeviceException
         else:
             check_output(["rescan-scsi-bus", "-r", "-c", channel_number])
@@ -406,14 +414,17 @@ class VnxiSCSIDriver():
 @implementer(IBlockDeviceAPI)
 class EMCVnxBlockDeviceAPI(object):
     """
-    A simulated ``IBlockDeviceAPI`` which creates volumes (devices) with EMC VNX array.
+    A simulated ``IBlockDeviceAPI`` which creates volumes (devices)
+    with EMC VNX array.
     """
 
     VERSION = '0.1'
     driver_name = 'vnx'
     MIN_XMS_VERSION = [2, 4, 0]
 
-    def __init__(self, configuration, cluster_id, compute_instance_id=socket.gethostname(), allocation_unit=None):
+    def __init__(self, configuration, cluster_id,
+                 compute_instance_id=socket.gethostname(),
+                 allocation_unit=None):
         """
 
        :param configuration: Arrayconfiguration
@@ -432,7 +443,8 @@ class EMCVnxBlockDeviceAPI(object):
 
         """
         :param: the flocker dataset_id
-        :return: True if volume folder exists. For each dataset_id a new volume is created.
+        :return: True if volume folder exists.
+            For each dataset_id a new volume is created.
         :exception: none
         """
         try:
@@ -442,11 +454,12 @@ class EMCVnxBlockDeviceAPI(object):
             for folder in vol_folder:
                 Message.new(folder_name=folder['name']).write(_logger)
                 # Folder name comes with a "/" as absolute path
-                if folder['name'] == (str(VnxMgmt.BASE_PATH) + str(self._cluster_id)):
+                if folder['name'] == (str(VnxMgmt.BASE_PATH) +
+                                      str(self._cluster_id)):
                     Message.new(Debug="Volume folder found").write(_logger)
                     return True
 
-        except DeviceExceptionObjNotFound as exc:
+        except DeviceExceptionObjNotFound:
             Message.new(value="Volume folder not found").write(_logger)
         except:
             Message.new(value="All Exception caught").write(_logger)
@@ -463,7 +476,6 @@ class EMCVnxBlockDeviceAPI(object):
                     self.mgmt.PARENT_FOLDER_ID: self.mgmt.BASE_PATH}
             self.mgmt.request(self.mgmt.VOLUME_FOLDERS, self.mgmt.POST, data)
         except DeviceExceptionObjNotFound as exe:
-            # Message.new(Error="Failed to create volume folder").write(_logger)
             raise exe
 
     def _check_version(self):
@@ -521,7 +533,8 @@ class EMCVnxBlockDeviceAPI(object):
             if int(vol_content['num-of-lun-mappings']) == 0:
                 is_attached_to = None
             else:
-                is_attached_to = unicode(vol_content['lun-mapping-list'][0][0][1])
+                is_attached_to = unicode(
+                    vol_content['lun-mapping-list'][0][0][1])
 
             volume = _blockdevicevolume_from_blockdevice_id(
                 blockdevice_id=blockdevice_id,
@@ -529,7 +542,7 @@ class EMCVnxBlockDeviceAPI(object):
                 attached_to=is_attached_to
             )
             return volume
-        except DeviceExceptionObjNotFound as exc:
+        except DeviceExceptionObjNotFound:
             raise UnknownVolume(blockdevice_id)
 
     def compute_instance_id(self):
@@ -550,7 +563,7 @@ class EMCVnxBlockDeviceAPI(object):
             self.data.initialize_connection()
             if not self._check_for_volume_folder():
                 self._create_volume_folder()
-        except DeviceVersionMismatch as exc:
+        except DeviceVersionMismatch:
             # Message.new(Error=exc).write(_logger)
             raise
         except """catch all other exception""":
@@ -594,9 +607,10 @@ class EMCVnxBlockDeviceAPI(object):
         :raise: UnknownVolume is not found
         """
         try:
-            Message.new(Info="Destroying Volume" + str(blockdevice_id)).write(_logger)
+            Message.new(Info="Destroying Volume" + str(blockdevice_id)). \
+                write(_logger)
             self.mgmt.request('volumes', 'DELETE', name=blockdevice_id)
-        except DeviceExceptionObjNotFound as exc:
+        except DeviceExceptionObjNotFound:
             raise UnknownVolume(blockdevice_id)
 
     def destroy_volume_folder(self):
@@ -605,17 +619,19 @@ class EMCVnxBlockDeviceAPI(object):
         :param: none
         """
         try:
-            Message.new(Info="Destroying Volume folder" + str(self._cluster_id)).write(_logger)
-            self.mgmt.request(VnxIOMgmt.VOLUME_FOLDERS, VnxIOMgmt.DELETE,
-                              name=VnxIOMgmt.BASE_PATH + str(self._cluster_id))
-        except DeviceExceptionObjNotFound as exc:
+            Message.new(Info="Destroying Volume folder" +
+                        str(self._cluster_id)).write(_logger)
+            self.mgmt.request(VnxMgmt.VOLUME_FOLDERS, VnxMgmt.DELETE,
+                              name=VnxMgmt.BASE_PATH + str(self._cluster_id))
+        except DeviceExceptionObjNotFound:
             raise UnknownVolume(self._cluster_id)
 
     def attach_volume(self, blockdevice_id, attach_to):
         """
-        Attach volume associates a volume with to a initiator group. The resultant of this is a
-        LUN - Logical Unit Number. This association can be made to any number of initiator groups. Post of this
-        attachment, the device shall appear in /dev/sd<1>.
+        Attach volume associates a volume with to a initiator group.
+        The resultant of this is a LUN - Logical Unit Number.
+        This association can be made to any number of initiator groups.
+        Post of this attachment, the device shall appear in /dev/sd<1>.
         See ``IBlockDeviceAPI.attach_volume`` for parameter and return type
         documentation.
         """
@@ -649,7 +665,8 @@ class EMCVnxBlockDeviceAPI(object):
             'vol-size': str(size_mb) + 'm'
         }
 
-        self.mgmt.request('volumes', 'PUT', data, name=str(volume.blockdevice_id))
+        self.mgmt.request('volumes', 'PUT', data,
+                          name=str(volume.blockdevice_id))
         self.data.rescan_scsi()
 
     def detach_volume(self, blockdevice_id):
@@ -659,10 +676,12 @@ class EMCVnxBlockDeviceAPI(object):
         """
         vol = self._get_vol_details(blockdevice_id)
         if vol.attached_to is not None:
-            self.data.destroy_lun_map(blockdevice_id, self._compute_instance_id)
+            self.data.destroy_lun_map(blockdevice_id,
+                                      self._compute_instance_id)
             self.data.rescan_scsi()
         else:
-            Message.new(Info="Volume" + blockdevice_id + "not attached").write(_logger)
+            Message.new(Info="Volume" + blockdevice_id +
+                        "not attached").write(_logger)
             raise UnattachedVolume(blockdevice_id)
 
     def list_volumes(self):
@@ -679,16 +698,18 @@ class EMCVnxBlockDeviceAPI(object):
             # and get list of volumes. The array may have
             # other volumes not owned by Flocker
             vol_folder = self.mgmt.request(VnxMgmt.VOLUME_FOLDERS,
-                                           name=VnxIOMgmt.BASE_PATH + str(self._cluster_id))['content']
+                                           name=VnxMgmt.BASE_PATH +
+                                           str(self._cluster_id))['content']
             # Get the number of volumes
-            Message.new(NoOfVolumesFound=vol_folder['num-of-vols']).write(_logger)
+            Message.new(NoOfVolumesFound=vol_folder['num-of-vols']) \
+                .write(_logger)
             if int(vol_folder['num-of-vols']) > 0:
                 for vol in vol_folder['direct-list']:
                     # Message.new(VolumeName=vol[1]).write(_logger)
                     volume = self._get_vol_details(vol[1])
                     volumes.append(volume)
                     # Message.new(volume=volume).write(_logger)
-        except Exception as exe:
+        except Exception:
             pass
             # Message.new(Error=exe).write(_logger)
 
@@ -721,7 +742,7 @@ class EMCVnxBlockDeviceAPI(object):
         raise UnknownVolume(blockdevice_id)
 
 
-def xio_from_configuration(cluster_id, xms_user, xms_password, xms_ip):
+def vnx_from_configuration(cluster_id, xms_user, xms_password, xms_ip):
     """
 
     :param xms_ip:
