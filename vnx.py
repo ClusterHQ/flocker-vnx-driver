@@ -330,8 +330,7 @@ class VnxiSCSIDriver():
         :param: mgmt - The EMC VNX XMS (management interface object)
         """
 
-        self.mgmt = mgmt
-        self._connector = {'initiator': None, 'ig': compute_instance_id}
+        self.cli = getEMCVnxCli('iSCSI', configuration=self.configuration)
 
     def initialize_connection(self):
         """
