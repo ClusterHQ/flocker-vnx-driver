@@ -14,13 +14,9 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 from subprocess import check_output
 
-import base64
-import urllib
-import urllib2
 import os
 import re
 import socket
-import math
 import random
 import time
 import types
@@ -214,596 +210,6 @@ class DeviceExceptionObjNotFound(Exception):
 # approach.  And it's hard to put Logger instances on PRecord subclasses which
 # we have a lot of.  So just use this global logger for now.
 _logger = Logger()
-
-
-class VnxMgmt():
-    """
-    EMC VNX exposes management interface through XMS. This class abstracts all
-    REST calls to be used by iSCSI class and the main driver class
-    """
-
-    GET = "GET"
-    POST = "POST"
-    DELETE = "DELETE"
-
-    VOL_FLOCKER = "VOL_FLOCKER"
-    VOLUME_FOLDERS = "volume-folders"
-
-    CAPTION = 'caption'
-    PARENT_FOLDER_ID = 'parent-folder-id'
-    BASE_PATH = '/'
-
-    def __init__(self, configuration):
-
-        """
-        :param configuration: ArrayConfiguration, which includes Management
-        interface hostname, username & password
-        the iSCSI data address (target)
-        """
-        self.base64_auth = (base64.encodestring('%s:%s' %
-                                                (configuration.array_login,
-                                                 configuration.array_password))
-                            .replace('\n', ''))
-        self.base_url = ('https://%s/api/json/types' %
-                         configuration.array_host)
-
-    def request(self, object_type='volumes', request_typ='GET', data=None,
-                name=None, idx=None):
-        """
-        :param object_type: Type of object - volumes, initiator, lun maps.
-           Refer to EMC VNX REST interface guide for more details.
-        :param request_typ: Type of request - GET, POST, DELETE
-        :param data: Raw data to be passed with request, if any
-        :param name: Parameter to the request
-        :param idx: If not name, then index of the object at EMC VNX
-        :return: REST Response
-        """
-
-        if name and idx:
-            Message.new("Request can't handle both name and index")
-            raise ValueError("can't handle both name and idx")
-
-        url = '%s/%s' % (self.base_url, object_type)
-        key = None
-        if name:
-            url = '%s?%s' % (url, urllib.urlencode({'name': name}))
-            key = name
-        elif idx:
-            url = '%s/%d' % (url, idx)
-            key = str(idx)
-        if data and request_typ == 'GET':
-            url + '?' + urllib.urlencode(data)
-            request = urllib2.Request(url)
-        elif data:
-            Message.new(data=json.dumps(data)).write(_logger)
-            request = urllib2.Request(url, json.dumps(data))
-        else:
-            request = urllib2.Request(url)
-        Message.new(url=url).write(_logger)
-        request.get_method = lambda: request_typ
-        request.add_header("Authorization", "Basic %s" % (self.base64_auth,))
-        try:
-            response = urllib2.urlopen(request)
-        except (urllib2.HTTPError) as exc:
-            if exc.code == 400 and hasattr(exc, 'read'):
-                error = json.load(exc)
-                if error['message'].endswith('obj_not_found'):
-                    Message.new(object_key=key + "of type").write(_logger)
-                    Message.new(object_type=object_type +
-                                " is not found").write(_logger)
-                    raise DeviceExceptionObjNotFound(Exception)
-                elif error['message'] == 'vol_obj_name_not_unique':
-                    Message.new(
-                        error="can't create 2 volumes with the same name") \
-                        .write(_logger)
-                    raise (InvalidVolumeMetadata(
-                        'Volume by this name already exists'))
-                raise
-        if response.code >= 300:
-            Message.new(Error=response.msg).write(_logger)
-            raise VolumeBackendAPIException(
-                data='bad response from XMS got http code %d, %s' %
-                     (response.code, response.msg))
-        str_result = response.read()
-        if str_result:
-            try:
-                return json.loads(str_result)
-            except Exception:
-                Message.new(value="EMCVnxBlockDeviceAPI:VnxMgmt:" +
-                                  "quering" + object_type + "type" +
-                                  request_typ + "failed to parse result" +
-                                  "return value" + str_result).write(_logger)
-
-
-class VnxiSCSIDriver(cluster_id, compute_instance_id, configuration):
-    """Executes commands relating to ISCSI volumes.
-
-    We make use of model provider properties as follows:
-    ``provider_auth``
-      if present, contains a space-separated triple:
-      '<auth method> <auth username> <auth password>'.
-      `CHAP` is the only auth_method in use at the moment.
-    """
-
-    def __init__(self, compute_instance_id):
-        """
-        :param: mgmt - The EMC VNX XMS (management interface object)
-        """
-        self.cluster_id = cluster_id
-        self.compute_instance_id = compute_instance_id
-        self.configuration = configuration
-
-        # Get VNX CLI and create storage group for Flocker cluster.
-        self.cli = getEMCVnxCli('iSCSI', configuration=configuration)
-        self.cli.assure_storage_group(cluster_id)
-
-    def create_lun_map(self, blockdevice_id, compute_instance_id):
-        """
-        :param: volume id or blockdevice_id passed from flocker
-        :param: hostname, we use hostname as initiator group's name.
-            If hostname is not current host, things won't break
-        :return: none
-        :exception: Unknown volume, if volume not found
-        """
-        try:
-            self.mgmt.request('lun-maps', 'POST',
-                              {'ig-id': compute_instance_id,
-                               "vol-id": str(blockdevice_id)})
-        except DeviceExceptionObjNotFound:
-            Message.new(Error="Could not attach volume"
-                              + str(blockdevice_id)
-                              + "for node "
-                              + str(compute_instance_id)).write(_logger)
-            raise UnknownVolume(blockdevice_id)
-
-    def destroy_lun_map(self, blockdevice_id, compute_instance_id):
-        """
-        :param: volumeid or blockdevice_id passed from flocker
-        :param: hostname used to identify initiator group
-        :return: none
-        :exception: Unknown volume if volume is not found
-        """
-        try:
-            ig = self.mgmt.request('initiator-groups',
-                                   name=compute_instance_id)['content']
-            tg = self.mgmt.request('target-groups', name="Default")['content']
-            vol = self.mgmt.request('volumes',
-                                    name=str(blockdevice_id))['content']
-            lm_name = '%s_%s_%s' % (str(vol['index']),
-                                    str(ig['index']) if ig else 'any',
-                                    str(tg['index']))
-            Message.new(lm_name=lm_name).write(_logger)
-            self.mgmt.request('lun-maps', 'DELETE', name=lm_name)
-        except DeviceExceptionObjNotFound:
-            Message.new(Error="destroy_lun_map: object not found for"
-                              + str(blockdevice_id) + "when mapped to "
-                              + str(compute_instance_id)).write(_logger)
-            raise UnknownVolume(blockdevice_id)
-
-    def get_lun_map(self, blockdevice_id):
-        """
-        :param blockdevice_id: Volume id
-        :return:return lun mapping if for the volume
-        :exception: Volume unattached, if no mapping was found
-        """
-        try:
-            vol = self.mgmt.request('volumes',
-                                    name=str(blockdevice_id))['content']
-            if int(vol['num-of-lun-mappings']) == 0:
-                raise UnattachedVolume(blockdevice_id)
-            else:
-                # EMC VNX gives unique lun number for each
-                # volume when it is attached. The unique lun number is
-                # generated in sequence
-                lun_mapping_list = vol['lun-mapping-list']
-                return lun_mapping_list[0][2]
-        except DeviceExceptionObjNotFound:
-            Message.new(Error="get_lun_map: could not be found for"
-                              + str(blockdevice_id)).write(_logger)
-
-    def rescan_scsi(self):
-        """
-        Rescan SCSI bus. This is needed in situations:
-            - Resize of volumes
-            - Detach of volumes
-            - Possibly creation of new volumes
-        :return:none
-        """
-        channel_number = self._get_channel_number()
-        # Check for error condition
-        if channel_number < 0:
-            Message.new(error="iSCSI login not done for VNX bailing out") \
-                   .write(_logger)
-            raise DeviceException
-        else:
-            check_output(["rescan-scsi-bus", "-r", "-c", channel_number])
-
-    def _get_channel_number(self):
-        """
-        Query scsi to get channel number of VNX devices.
-        Right now it supports only one VNX connected array
-        :return: channel number
-        """
-        output = check_output([b"/usr/bin/lsscsi"])
-        # lsscsi gives output in the following form:
-        # [0:0:0:0]    disk    ATA      ST91000640NS     SN03  /dev/sdp
-        # [1:0:0:0]    disk    DGC      LUNZ             0532  /dev/sdb
-        # [1:0:1:0]    disk    DGC      LUNZ             0532  /dev/sdc
-        # [8:0:0:0]    disk    MSFT     Virtual HD       6.3   /dev/sdd
-        # [9:0:0:0]    disk VNX  XtremApp         2400     /dev/sde
-
-        # We shall parse the output above and to give out channel number
-        # as 9
-        for row in output.split('\n'):
-            if re.search(r'XtremApp', row, re.I):
-                channel_row = re.search('\d+', row)
-                if channel_row:
-                    channel_number = channel_row.group()
-                    return channel_number
-
-        # Did not find channel number of VNX
-        # The number cannot be negative
-        return -1
-
-    def _get_initiator(self):
-        """
-        Initiator name of the current host
-        """
-        if self._connector['initiator'] is not None:
-            return self._connector
-        else:
-            # TODO there couldbe multiple interfaces
-            iscsin = os.popen('cat %s' % INITIATOR_FILE).read()
-            match = re.search('InitiatorName=.*', iscsin)
-            if len(match.group(0)) > 13:
-                self._connector['initiator'] = match.group(0)[14:]
-        return self._connector['initiator']
-
-    def _get_ig(self):
-        """
-        Initiator group name on VNX
-        """
-        return self._connector['ig']
-
-    def _get_password(self):
-        """
-        :return: Returns chap password
-        """
-        # We do not support chap protocol right now
-        return 'password'
-
-
-@implementer(IBlockDeviceAPI)
-class EMCVnxBlockDeviceAPI(object):
-    """
-    A simulated ``IBlockDeviceAPI`` which creates volumes (devices)
-    with EMC VNX array.
-    """
-
-    VERSION = '0.1'
-    driver_name = 'vnx'
-    MIN_XMS_VERSION = [2, 4, 0]
-
-    def __init__(self, configuration, cluster_id,
-                 compute_instance_id=socket.gethostname(),
-                 allocation_unit=None):
-        """
-
-       :param configuration: Arrayconfiguration
-       """
-        self._cluster_id = cluster_id
-        self._compute_instance_id = compute_instance_id
-        self.volume_list = {}
-        if allocation_unit is None:
-            allocation_unit = 1
-        self._allocation_unit = allocation_unit
-        self.mgmt = VnxMgmt(configuration)
-        self.data = VnxiSCSIDriver(self.mgmt,
-                                   self._cluster_id,
-                                   self._compute_instance_id)
-        self._initialize_setup()
-
-    def _check_for_volume_folder(self):
-
-        """
-        :param: the flocker dataset_id
-        :return: True if volume folder exists.
-            For each dataset_id a new volume is created.
-        :exception: none
-        """
-        try:
-            vol_folders = self.mgmt.request(VnxMgmt.VOLUME_FOLDERS)
-            vol_folder = vol_folders['folders']
-            Message.new(folders=vol_folder).write(_logger)
-            for folder in vol_folder:
-                Message.new(folder_name=folder['name']).write(_logger)
-                # Folder name comes with a "/" as absolute path
-                if folder['name'] == (str(VnxMgmt.BASE_PATH) +
-                                      str(self._cluster_id)):
-                    Message.new(Debug="Volume folder found").write(_logger)
-                    return True
-
-        except DeviceExceptionObjNotFound:
-            Message.new(value="Volume folder not found").write(_logger)
-        except:
-            Message.new(value="All Exception caught").write(_logger)
-
-        return False
-
-    def _create_volume_folder(self):
-
-        """
-        :param: the flocker dataset_id
-        """
-        try:
-            data = {self.mgmt.CAPTION: str(self._cluster_id),
-                    self.mgmt.PARENT_FOLDER_ID: self.mgmt.BASE_PATH}
-            self.mgmt.request(self.mgmt.VOLUME_FOLDERS, self.mgmt.POST, data)
-        except DeviceExceptionObjNotFound as exe:
-            raise exe
-
-    def _check_version(self):
-
-        """
-        Checks version of EMC VNX
-        """
-        sys = self.mgmt.request('clusters', idx=1)['content']
-        ver = [int(n) for n in sys['sys-sw-version'].split('-')[0].split('.')]
-        if ver < self.MIN_XMS_VERSION:
-            Message.new(Error='Invalid VNX version ' + sys['sys-sw-version'])
-            raise (DeviceVersionMismatch
-                   ('Invalid VNX version, version 2.4 or up is required'))
-        else:
-            msg = "VNX SW version " + sys['sys-sw-version']
-            Message.new(version=msg).write(_logger)
-
-    def _convert_size(self, size, to='BYTES'):
-        """
-        :param size: size to convert to or from
-        :param to: type of coversion
-        :return: converted size
-        """
-        if to == 'MB':
-            size = (size / 1048576)
-        else:
-            size *= 1024
-
-        return size
-
-    def _get(self, blockdevice_id):
-        """
-        :param blockdevice_id: - volume id
-        :return:volume object
-        """
-        try:
-            volume = self.volume_list[str(blockdevice_id)]
-            if volume is not None:
-                return volume
-            else:
-                raise UnknownVolume(blockdevice_id)
-        except:
-            raise UnknownVolume(blockdevice_id)
-
-    def _get_vol_details(self, blockdevice_id):
-        """
-        :param blockdevice_id - volume id
-        :return:volume details
-        :exception: Unknown volume
-        """
-        try:
-            vol = self.mgmt.request('volumes', 'GET', name=blockdevice_id)
-            vol_content = vol['content']
-
-            if int(vol_content['num-of-lun-mappings']) == 0:
-                is_attached_to = None
-            else:
-                is_attached_to = unicode(
-                    vol_content['lun-mapping-list'][0][0][1])
-
-            volume = _blockdevicevolume_from_blockdevice_id(
-                blockdevice_id=blockdevice_id,
-                size=self._convert_size(int(vol_content['vol-size'])),
-                attached_to=is_attached_to
-            )
-            return volume
-        except DeviceExceptionObjNotFound:
-            raise UnknownVolume(blockdevice_id)
-
-    def compute_instance_id(self):
-        """
-        :return: Compute instance id
-        """
-        return self._compute_instance_id
-
-    def _initialize_setup(self):
-        """
-        Initialize setup with EMC VNX
-        - Check of the right version
-        - Create Initiator group for the current host
-        """
-
-        try:
-            self._check_version()
-            self.data.initialize_connection()
-            if not self._check_for_volume_folder():
-                self._create_volume_folder()
-        except DeviceVersionMismatch:
-            # Message.new(Error=exc).write(_logger)
-            raise
-        except """catch all other exception""":
-            Message.new(Error="Unknown Exception occurred in last call")
-
-    def allocation_unit(self):
-        """
-        Return allocation unit
-        """
-        return self._allocation_unit
-
-    def create_volume(self, dataset_id, size):
-        """
-        Create a volume of specified size on the EMC VNX Array.
-        The size shall be rounded off to 1BM, as EMC VNX creates
-        volumes of these sizes.
-
-        See ``IBlockDeviceAPI.create_volume`` for parameter and return type
-        documentation.
-        """
-        if not self._check_for_volume_folder():
-            self._create_volume_folder()
-
-        # Round up to 1MB boundaries
-        size_mb = self._convert_size(size, 'MB')
-
-        volume = _blockdevicevolume_from_dataset_id(
-            size=size, dataset_id=dataset_id,
-        )
-        data = {'vol-name': str(volume.blockdevice_id),
-                'vol-size': str(size_mb) + 'm',
-                'parent-folder-id': VnxMgmt.BASE_PATH + str(self._cluster_id)}
-        self.mgmt.request('volumes', 'POST', data)
-        self.volume_list[str(volume.blockdevice_id)] = volume
-        return volume
-
-    def destroy_volume(self, blockdevice_id):
-        """
-        Destroy the storage for the given unattached volume.
-        :param: blockdevice_id - the volume id
-        :raise: UnknownVolume is not found
-        """
-        try:
-            Message.new(Info="Destroying Volume" + str(blockdevice_id)). \
-                write(_logger)
-            self.mgmt.request('volumes', 'DELETE', name=blockdevice_id)
-        except DeviceExceptionObjNotFound:
-            raise UnknownVolume(blockdevice_id)
-
-    def destroy_volume_folder(self):
-        """
-        Destroy the volume folder
-        :param: none
-        """
-        try:
-            Message.new(Info="Destroying Volume folder" +
-                        str(self._cluster_id)).write(_logger)
-            self.mgmt.request(VnxMgmt.VOLUME_FOLDERS, VnxMgmt.DELETE,
-                              name=VnxMgmt.BASE_PATH + str(self._cluster_id))
-        except DeviceExceptionObjNotFound:
-            raise UnknownVolume(self._cluster_id)
-
-    def attach_volume(self, blockdevice_id, attach_to):
-        """
-        Attach volume associates a volume with to a initiator group.
-        The resultant of this is a LUN - Logical Unit Number.
-        This association can be made to any number of initiator groups.
-        Post of this attachment, the device shall appear in /dev/sd<1>.
-        See ``IBlockDeviceAPI.attach_volume`` for parameter and return type
-        documentation.
-        """
-
-        volume = self._get_vol_details(blockdevice_id)
-
-        if volume.attached_to is None:
-            self.data.create_lun_map(str(blockdevice_id), str(attach_to))
-        else:
-            raise AlreadyAttachedVolume(blockdevice_id)
-
-        attached_volume = volume.set(attached_to=unicode(attach_to))
-        self.volume_list[str(blockdevice_id)] = attached_volume
-        Message.new(attached_to=attached_volume.attached_to).write(_logger)
-        self.data.rescan_scsi()
-        return attached_volume
-
-    def resize_volume(self, blockdevice_id, size):
-        """
-        Change the size of the EMX VNX device.
-        This implementation is limited to being able to resize volumes only if
-        they are unattached.
-        """
-        # Raise unknown volume
-        volume = self._get_vol_details(blockdevice_id)
-
-        # Round up to 1MB boundaries
-        size_mb = self._convert_size(size, 'MB')
-
-        data = {
-            'vol-size': str(size_mb) + 'm'
-        }
-
-        self.mgmt.request('volumes', 'PUT', data,
-                          name=str(volume.blockdevice_id))
-        self.data.rescan_scsi()
-
-    def detach_volume(self, blockdevice_id):
-        """
-        :param: volume id = blockdevice_id
-        :raises: unknownvolume exception if not found
-        """
-        vol = self._get_vol_details(blockdevice_id)
-        if vol.attached_to is not None:
-            self.data.destroy_lun_map(blockdevice_id,
-                                      self._compute_instance_id)
-            self.data.rescan_scsi()
-        else:
-            Message.new(Info="Volume" + blockdevice_id +
-                        "not attached").write(_logger)
-            raise UnattachedVolume(blockdevice_id)
-
-    def list_volumes(self):
-        """
-        Return ``BlockDeviceVolume`` instances for all the files in the
-        ``unattached`` directory and all per-host directories.
-
-        See ``IBlockDeviceAPI.list_volumes`` for parameter and return type
-        documentation.
-        """
-        volumes = []
-        try:
-            # Query for volume folder by name VOL_FLOCKER
-            # and get list of volumes. The array may have
-            # other volumes not owned by Flocker
-            vol_folder = self.mgmt.request(VnxMgmt.VOLUME_FOLDERS,
-                                           name=VnxMgmt.BASE_PATH +
-                                           str(self._cluster_id))['content']
-            # Get the number of volumes
-            Message.new(NoOfVolumesFound=vol_folder['num-of-vols']) \
-                .write(_logger)
-            if int(vol_folder['num-of-vols']) > 0:
-                for vol in vol_folder['direct-list']:
-                    # Message.new(VolumeName=vol[1]).write(_logger)
-                    volume = self._get_vol_details(vol[1])
-                    volumes.append(volume)
-                    # Message.new(volume=volume).write(_logger)
-        except Exception:
-            pass
-            # Message.new(Error=exe).write(_logger)
-
-        return volumes
-
-    def get_device_path(self, blockdevice_id):
-        """
-        :param blockdevice_id:
-        :return:the device path
-        """
-        # Query LunID from VNX
-        lunid = self.data.get_lun_map(blockdevice_id)
-        output = check_output([b"/usr/bin/lsscsi"])
-        # lsscsi gives output in the following form:
-        # [0:0:0:0]    disk    ATA      ST91000640NS     SN03  /dev/sdp
-        # [1:0:0:0]    disk    DGC      LUNZ             0532  /dev/sdb
-        # [1:0:1:0]    disk    DGC      LUNZ             0532  /dev/sdc
-        # [8:0:0:0]    disk    MSFT     Virtual HD       6.3   /dev/sdd
-        # [9:0:0:0]    disk VNX  XtremApp         2400     /dev/sde
-
-        # We shall parse the output above and give out path /dev/sde as in
-        # this case
-        for row in output.split('\n'):
-            if re.search(r'XtremApp', row, re.I):
-                if re.search(r'\d:\d:\d:' + str(lunid), row, re.I):
-                    device_name = re.findall(r'/\w+', row, re.I)
-                    if device_name:
-                        return FilePath(device_name[0] + device_name[1])
-
-        raise UnknownVolume(blockdevice_id)
 
 
 def vnx_from_configuration(cluster_id, xms_user, xms_password, xms_ip):
@@ -2438,29 +1844,36 @@ class CommandLineHelper(object):
         return rc, out
 
 
-@decorate_all_methods(log_enter_exit)
-class EMCVnxCliBase(object):
-    """This class defines the functions to use the native CLI functionality."""
-
-    VERSION = '06.00.00'
-    stats = {'driver_version': VERSION,
-             'storage_protocol': None,
-             'vendor_name': 'EMC',
-             'volume_backend_name': None,
-             'compression_support': 'False',
-             'fast_support': 'False',
-             'deduplication_support': 'False',
-             'thin_provisioning_support': False,
-             'thick_provisioning_support': True}
+@implementer(IBlockDeviceAPI)
+class EMCVnxBlockDeviceAPI(object):
+    """
+    A simulated ``IBlockDeviceAPI`` which creates volumes (devices)
+    with EMC VNX array.
+    """
     enablers = []
     tmp_snap_prefix = 'tmp-snap-'
     snap_as_vol_prefix = 'snap-as-vol-'
     tmp_cgsnap_prefix = 'tmp-cgsnapshot-'
     tmp_smp_for_backup_prefix = 'tmp-smp-'
 
-    def __init__(self, prtcl, configuration=None):
+    VERSION = '0.1'
+    driver_name = 'vnx'
+
+    def __init__(self, prtcl, configuration, cluster_id,
+                 compute_instance_id=socket.gethostname(),
+                 allocation_unit=None):
+        """
+
+       :param configuration: Arrayconfiguration
+       """
         self.protocol = prtcl
         self.configuration = configuration
+        self._cluster_id = cluster_id
+        self._compute_instance_id = compute_instance_id
+        self.volume_list = {}
+        if allocation_unit is None:
+            allocation_unit = 1
+        self._allocation_unit = allocation_unit
         self.max_luns_per_sg = self.configuration.max_luns_per_storage_group
         self.destroy_empty_sg = self.configuration.destroy_empty_storage_group
         self.itor_auto_reg = self.configuration.initiator_auto_registration
@@ -2486,6 +1899,7 @@ class EMCVnxCliBase(object):
                          "Please register initiator manually."))
         self.hlu_set = set(range(1, self.max_luns_per_sg + 1))
         self._client = CommandLineHelper(self.configuration)
+        self._client.assure_storage_group(cluster_id)
         conf_pools = self.configuration.safe_get("storage_vnx_pool_names")
         self.storage_pools = self._get_managed_storage_pools(conf_pools)
         self.array_serial = None
@@ -2639,52 +2053,22 @@ class EMCVnxCliBase(object):
     def _construct_tmp_smp_name(self, snapshot):
         return self.tmp_smp_for_backup_prefix + snapshot.id
 
-    def create_volume(self, volume):
+    def create_volume(self, dataset_id, size):
         """Creates a EMC volume."""
-        volume_size = volume['size']
-        volume_name = volume['name']
+        volume = _blockdevicevolume_from_dataset_id(
+            size=size, dataset_id=dataset_id,
+        )
+        name = str(volume.blockdevice_id)
 
-        self._volume_creation_check(volume)
-        volume_metadata = self._get_volume_metadata(volume)
         # defining CLI command
-        specs = self.get_volumetype_extraspecs(volume)
-        pool = self.get_target_storagepool(volume)
-        provisioning, tiering, snapcopy = self._get_extra_spec_value(specs)
-
-        if snapcopy == 'true' and volume['consistencygroup_id']:
-            msg = _("Volume with copytype:snap=True can not be put in "
-                    "consistency group.")
-            LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
-
-        LOG.info(_LI('Create Volume: %(volume)s  Size: %(size)s '
-                     'pool: %(pool)s '
-                     'provisioning: %(provisioning)s '
-                     'tiering: %(tiering)s '
-                     'snapcopy: %(snapcopy)s.'),
-                 {'volume': volume_name,
-                  'size': volume_size,
-                  'pool': pool,
-                  'provisioning': provisioning,
-                  'tiering': tiering,
-                  'snapcopy': snapcopy})
-
-        data = self._client.create_lun_with_advance_feature(
-            pool, volume_name, volume_size,
-            provisioning, tiering, volume['consistencygroup_id'],
-            ignore_thresholds=self.ignore_pool_full_threshold,
-            poll=False)
-        pl = self._build_provider_location(data['lun_id'])
-        volume_metadata['lun_type'] = 'lun'
-        model_update = {'provider_location': pl,
-                        'metadata': volume_metadata}
-
-        return model_update
-
-    def _volume_creation_check(self, volume):
-        """Checks on extra spec before the volume can be created."""
-        specs = self.get_volumetype_extraspecs(volume)
-        self._get_and_validate_extra_specs(specs)
+        command_create_lun = ['lun', '-create',
+                              '-capacity', size,
+                              '-sq', 'gb',
+                              # '-poolName', pool,
+                              '-name', name]
+        self.create_lun_by_cmd(command_create_lun, name)
+        self.volume_list[str(volume.blockdevice_id)] = volume
+        return volume
 
     def _get_and_validate_extra_specs(self, specs):
         """Checks on extra specs combinations."""
@@ -2805,28 +2189,6 @@ class EMCVnxCliBase(object):
             if lun_type == 'smp':
                 self._client.delete_snapshot(
                     self._construct_snap_as_vol_name(volume))
-
-    def extend_volume(self, volume, new_size):
-        """Extends an EMC volume."""
-
-        try:
-            self._client.expand_lun_and_wait(volume['name'], new_size)
-        except exception.EMCVnxCLICmdError as ex:
-            with excutils.save_and_reraise_exception(ex) as ctxt:
-                out = "\n".join(ex.kwargs["out"])
-                if VNXError.has_error(out, VNXError.LUN_IS_PREPARING):
-                    # The error means the operation cannot be performed
-                    # because the LUN is 'Preparing'. Wait for a while
-                    # so that the LUN may get out of the transitioning
-                    # state.
-                    LOG.warning(_LW("LUN %(name)s is not ready for extension: "
-                                    "%(out)s"),
-                                {'name': volume['name'], 'out': out})
-                    self._client.wait_until_lun_ready_for_ops(volume['name'])
-                    self._client.expand_lun_and_wait(volume['name'], new_size)
-                    ctxt.reraise = False
-                else:
-                    ctxt.reraise = True
 
     def _get_original_status(self, volume):
         if not volume['volume_attachment']:
@@ -3029,101 +2391,6 @@ class EMCVnxCliBase(object):
                 return False
         return True
 
-    def _build_pool_stats(self, pool, pool_feature=None):
-        pool_stats = {}
-        pool_stats['pool_name'] = pool['pool_name']
-        pool_stats['total_capacity_gb'] = pool['total_capacity_gb']
-        pool_stats['provisioned_capacity_gb'] = (
-            pool['provisioned_capacity_gb'])
-
-        # Handle pool state Initializing, Ready, Faulted, Offline or Deleting.
-        if pool['state'] in ('Initializing', 'Offline', 'Deleting'):
-            pool_stats['free_capacity_gb'] = 0
-            LOG.warning(_LW("Storage Pool '%(pool)s' is '%(state)s'."),
-                        {'pool': pool_stats['pool_name'],
-                         'state': pool['state']})
-        else:
-            pool_stats['free_capacity_gb'] = pool['free_capacity_gb']
-            if self.check_max_pool_luns_threshold:
-                pool_feature = self._client.get_pool_feature_properties(
-                    poll=False) if not pool_feature else pool_feature
-                if (pool_feature['max_pool_luns'] <=
-                        pool_feature['total_pool_luns']):
-                    LOG.warning(_LW("Maximum number of Pool LUNs, %s, "
-                                    "have been created. "
-                                    "No more LUN creation can be done."),
-                                pool_feature['max_pool_luns'])
-                    pool_stats['free_capacity_gb'] = 0
-
-        if not self.reserved_percentage:
-            # Since the admin is not sure of what value is proper,
-            # the driver will calculate the recommended value.
-
-            # Some extra capacity will be used by meta data of pool LUNs.
-            # The overhead is about LUN_Capacity * 0.02 + 3 GB
-            # reserved_percentage will be used to make sure the scheduler
-            # takes the overhead into consideration.
-            # Assume that all the remaining capacity is to be used to create
-            # a thick LUN, reserved_percentage is estimated as follows:
-            reserved = (((0.02 * pool['free_capacity_gb'] + 3) /
-                         (1.02 * pool['total_capacity_gb'])) * 100)
-            # Take pool full threshold into consideration
-            if not self.ignore_pool_full_threshold:
-                reserved += 100 - pool['pool_full_threshold']
-            pool_stats['reserved_percentage'] = int(math.ceil(min(reserved,
-                                                                  100)))
-        else:
-            pool_stats['reserved_percentage'] = self.reserved_percentage
-
-        array_serial = self.get_array_serial()
-        pool_stats['location_info'] = ('%(pool_name)s|%(array_serial)s' %
-                                       {'pool_name': pool['pool_name'],
-                                        'array_serial': array_serial})
-        # Check if this pool's fast_cache is enabled
-        if 'fast_cache_enabled' not in pool:
-            pool_stats['fast_cache_enabled'] = 'False'
-        else:
-            pool_stats['fast_cache_enabled'] = pool['fast_cache_enabled']
-
-        # Copy advanced feature stats from backend stats
-        pool_stats['compression_support'] = self.stats['compression_support']
-        pool_stats['fast_support'] = self.stats['fast_support']
-        pool_stats['deduplication_support'] = (
-            self.stats['deduplication_support'])
-        # Thin provisioning is supported on VNX pools only when
-        # ThinProvisioning Enabler software is installed on VNX,
-        # and thick provisioning is always supported on VNX pools.
-        pool_stats['thin_provisioning_support'] = (
-            self.stats['thin_provisioning_support'])
-        pool_stats['thick_provisioning_support'] = True
-        pool_stats['consistencygroup_support'] = (
-            self.stats['consistencygroup_support'])
-        pool_stats['max_over_subscription_ratio'] = (
-            self.max_over_subscription_ratio)
-
-        return pool_stats
-
-    def update_enabler_in_volume_stats(self):
-        """Updates the enabler information in stats."""
-        if not self.determine_all_enablers_exist(self.enablers):
-            self.enablers = self._client.get_enablers_on_array()
-
-        self.stats['compression_support'] = (
-            'True' if '-Compression' in self.enablers else 'False')
-
-        self.stats['fast_support'] = (
-            'True' if '-FAST' in self.enablers else 'False')
-
-        self.stats['deduplication_support'] = (
-            'True' if '-Deduplication' in self.enablers else 'False')
-
-        self.stats['thin_provisioning_support'] = (
-            True if '-ThinProvisioning' in self.enablers else False)
-
-        self.stats['consistencygroup_support'] = (
-            'True' if '-VNXSnapshots' in self.enablers else 'False')
-        return self.stats
-
     def create_snapshot(self, snapshot):
         """Creates a snapshot."""
 
@@ -3171,130 +2438,6 @@ class EMCVnxCliBase(object):
                  {'snapshot': snapshot_name})
 
         self._client.delete_snapshot(snapshot_name)
-
-    def create_volume_from_snapshot(self, volume, snapshot):
-        """Constructs a work flow to create a volume from snapshot.
-
-        This flow will do the following:
-
-        1. Create a snap mount point (SMP) for the snapshot.
-        2. Attach the snapshot to the SMP created in the first step.
-        3. Create a temporary lun prepare for migration.
-           (Skipped if copytype:snap='true')
-        4. Start a migration between the SMP and the temp lun.
-           (Skipped if copytype:snap='true')
-        """
-        self._volume_creation_check(volume)
-        flow_name = 'create_volume_from_snapshot'
-        work_flow = linear_flow.Flow(flow_name)
-        store_spec = self._construct_store_spec(volume, snapshot)
-        volume_metadata = self._get_volume_metadata(volume)
-        if store_spec['snapcopy'] == 'false':
-            work_flow.add(CreateSMPTask(),
-                          AttachSnapTask(),
-                          CreateDestLunTask(),
-                          MigrateLunTask())
-            flow_engine = taskflow.engines.load(work_flow,
-                                                store=store_spec)
-            flow_engine.run()
-            new_lun_id = flow_engine.storage.fetch('new_lun_id')
-            pl = self._build_provider_location(new_lun_id, 'lun')
-            volume_metadata['lun_type'] = 'lun'
-        else:
-            work_flow.add(CopySnapshotTask(),
-                          AllowReadWriteOnSnapshotTask(),
-                          CreateSMPTask(),
-                          AttachSnapTask())
-            flow_engine = taskflow.engines.load(work_flow,
-                                                store=store_spec)
-            flow_engine.run()
-            new_lun_id = flow_engine.storage.fetch('new_smp_id')
-            pl = self._build_provider_location(new_lun_id, 'smp')
-            volume_metadata['lun_type'] = 'smp'
-        model_update = {'provider_location': pl,
-                        'metadata': volume_metadata}
-        volume_host = volume['host']
-        host = vol_utils.extract_host(volume_host, 'backend')
-        host_and_pool = vol_utils.append_host(host, store_spec['pool_name'])
-        if volume_host != host_and_pool:
-            model_update['host'] = host_and_pool
-
-        return model_update
-
-    def create_cloned_volume(self, volume, src_vref):
-        """Creates a clone of the specified volume."""
-        lun_type = self._extract_provider_location_for_lun(
-            src_vref['provider_location'], 'type')
-        if lun_type == 'smp':
-            msg = (_('Failed to clone %s because it is a '
-                     'snapshot mount point.')
-                   % src_vref['name'])
-            LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
-        self._volume_creation_check(volume)
-        source_volume_name = src_vref['name']
-        source_lun_id = self.get_lun_id(src_vref)
-        volume_size = src_vref['size']
-        consistencygroup_id = src_vref['consistencygroup_id']
-        snapshot_name = self._construct_tmp_snap_name(volume)
-        tmp_cgsnapshot_name = None
-        if consistencygroup_id:
-            tmp_cgsnapshot_name = self.tmp_cgsnap_prefix + volume['id']
-
-        snapshot = {
-            'name': snapshot_name,
-            'volume_name': source_volume_name,
-            'volume_size': volume_size,
-            'volume': src_vref,
-            'cgsnapshot_id': tmp_cgsnapshot_name,
-            'consistencygroup_id': consistencygroup_id,
-            'id': tmp_cgsnapshot_name
-        }
-        flow_name = 'create_cloned_volume'
-        store_spec = self._construct_store_spec(volume, snapshot)
-        volume_metadata = self._get_volume_metadata(volume)
-        work_flow = linear_flow.Flow(flow_name)
-        if store_spec['snapcopy'] == 'true':
-            snapshot['name'] = self._construct_snap_as_vol_name(volume)
-        store_spec.update({'snapshot': snapshot})
-        store_spec.update({'source_lun_id': source_lun_id})
-        if store_spec['snapcopy'] == 'false':
-            work_flow.add(CreateSnapshotTask(),
-                          CreateSMPTask(),
-                          AttachSnapTask(),
-                          CreateDestLunTask(),
-                          MigrateLunTask())
-            flow_engine = taskflow.engines.load(work_flow,
-                                                store=store_spec)
-            flow_engine.run()
-            new_lun_id = flow_engine.storage.fetch('new_lun_id')
-            # Delete temp Snapshot
-            if consistencygroup_id:
-                self._client.delete_cgsnapshot(snapshot['id'])
-            else:
-                self.delete_snapshot(snapshot)
-            pl = self._build_provider_location(new_lun_id, 'lun')
-            volume_metadata['lun_type'] = 'lun'
-        else:
-            work_flow.add(CreateSnapshotTask(),
-                          CreateSMPTask(),
-                          AttachSnapTask())
-            flow_engine = taskflow.engines.load(work_flow,
-                                                store=store_spec)
-            flow_engine.run()
-            new_lun_id = flow_engine.storage.fetch('new_smp_id')
-            pl = self._build_provider_location(new_lun_id, 'smp')
-            volume_metadata['lun_type'] = 'smp'
-
-        model_update = {'provider_location': pl,
-                        'metadata': volume_metadata}
-        volume_host = volume['host']
-        host = vol_utils.extract_host(volume_host, 'backend')
-        host_and_pool = vol_utils.append_host(host, store_spec['pool_name'])
-        if volume_host != host_and_pool:
-            model_update['host'] = host_and_pool
-
-        return model_update
 
     def _get_volume_metadata(self, volume):
         volume_metadata = {}
@@ -4262,37 +3405,236 @@ class EMCVnxCliBase(object):
             raise exception.VolumeBackendAPIException(data=msg)
         return pool
 
-    def update_volume_stats(self):
-        """Retrieves stats info."""
-        self.update_enabler_in_volume_stats()
-        if self.protocol == 'iSCSI':
-            self.iscsi_targets = self._client.get_iscsi_targets(
-                poll=False, io_ports=self.io_ports)
+    def _check_version(self):
 
-        properties = [self._client.POOL_FREE_CAPACITY,
-                      self._client.POOL_TOTAL_CAPACITY,
-                      self._client.POOL_STATE,
-                      self._client.POOL_SUBSCRIBED_CAPACITY,
-                      self._client.POOL_FULL_THRESHOLD]
-        if '-FASTCache' in self.enablers:
-            properties.append(self._client.POOL_FAST_CACHE)
+        """
+        Checks version of EMC VNX
+        """
+        sys = self.mgmt.request('clusters', idx=1)['content']
+        ver = [int(n) for n in sys['sys-sw-version'].split('-')[0].split('.')]
+        if ver < self.MIN_XMS_VERSION:
+            Message.new(Error='Invalid VNX version ' + sys['sys-sw-version'])
+            raise (DeviceVersionMismatch
+                   ('Invalid VNX version, version 2.4 or up is required'))
+        else:
+            msg = "VNX SW version " + sys['sys-sw-version']
+            Message.new(version=msg).write(_logger)
 
-        pool_list = self._client.get_pool_list(properties, False)
+    def _convert_size(self, size, to='BYTES'):
+        """
+        :param size: size to convert to or from
+        :param to: type of coversion
+        :return: converted size
+        """
+        if to == 'MB':
+            size = (size / 1048576)
+        else:
+            size *= 1024
 
-        if self.storage_pools:
-            pool_list = filter(lambda a: a['pool_name'] in self.storage_pools,
-                               pool_list)
-        pool_feature = (self._client.get_pool_feature_properties(poll=False)
-                        if self.check_max_pool_luns_threshold else None)
-        self.stats['pools'] = map(
-            lambda pool: self._build_pool_stats(pool, pool_feature), pool_list)
+        return size
 
-        return self.stats
+    def _get(self, blockdevice_id):
+        """
+        :param blockdevice_id: - volume id
+        :return:volume object
+        """
+        try:
+            volume = self.volume_list[str(blockdevice_id)]
+            if volume is not None:
+                return volume
+            else:
+                raise UnknownVolume(blockdevice_id)
+        except:
+            raise UnknownVolume(blockdevice_id)
+
+    def _get_vol_details(self, blockdevice_id):
+        """
+        :param blockdevice_id - volume id
+        :return:volume details
+        :exception: Unknown volume
+        """
+        try:
+            vol = self.mgmt.request('volumes', 'GET', name=blockdevice_id)
+            vol_content = vol['content']
+
+            if int(vol_content['num-of-lun-mappings']) == 0:
+                is_attached_to = None
+            else:
+                is_attached_to = unicode(
+                    vol_content['lun-mapping-list'][0][0][1])
+
+            volume = _blockdevicevolume_from_blockdevice_id(
+                blockdevice_id=blockdevice_id,
+                size=self._convert_size(int(vol_content['vol-size'])),
+                attached_to=is_attached_to
+            )
+            return volume
+        except DeviceExceptionObjNotFound:
+            raise UnknownVolume(blockdevice_id)
+
+    def compute_instance_id(self):
+        """
+        :return: Compute instance id
+        """
+        return self._compute_instance_id
+
+    def _initialize_setup(self):
+        """
+        Initialize setup with EMC VNX
+        - Check of the right version
+        - Create Initiator group for the current host
+        """
+
+        try:
+            self._check_version()
+            self.data.initialize_connection()
+            if not self._check_for_volume_folder():
+                self._create_volume_folder()
+        except DeviceVersionMismatch:
+            # Message.new(Error=exc).write(_logger)
+            raise
+        except """catch all other exception""":
+            Message.new(Error="Unknown Exception occurred in last call")
+
+    def allocation_unit(self):
+        """
+        Return allocation unit
+        """
+        return self._allocation_unit
+
+    def destroy_volume(self, blockdevice_id):
+        """
+        Destroy the storage for the given unattached volume.
+        :param: blockdevice_id - the volume id
+        :raise: UnknownVolume is not found
+        """
+        try:
+            Message.new(Info="Destroying Volume" + str(blockdevice_id)). \
+                write(_logger)
+            self.mgmt.request('volumes', 'DELETE', name=blockdevice_id)
+        except DeviceExceptionObjNotFound:
+            raise UnknownVolume(blockdevice_id)
+
+    def attach_volume(self, blockdevice_id, attach_to):
+        """
+        Attach volume associates a volume with to a initiator group.
+        The resultant of this is a LUN - Logical Unit Number.
+        This association can be made to any number of initiator groups.
+        Post of this attachment, the device shall appear in /dev/sd<1>.
+        See ``IBlockDeviceAPI.attach_volume`` for parameter and return type
+        documentation.
+        """
+
+        volume = self._get_vol_details(blockdevice_id)
+
+        if volume.attached_to is None:
+            self.data.create_lun_map(str(blockdevice_id), str(attach_to))
+        else:
+            raise AlreadyAttachedVolume(blockdevice_id)
+
+        attached_volume = volume.set(attached_to=unicode(attach_to))
+        self.volume_list[str(blockdevice_id)] = attached_volume
+        Message.new(attached_to=attached_volume.attached_to).write(_logger)
+        self.data.rescan_scsi()
+        return attached_volume
+
+    def resize_volume(self, blockdevice_id, size):
+        """
+        Change the size of the EMX VNX device.
+        This implementation is limited to being able to resize volumes only if
+        they are unattached.
+        """
+        # Raise unknown volume
+        volume = self._get_vol_details(blockdevice_id)
+
+        # Round up to 1MB boundaries
+        size_mb = self._convert_size(size, 'MB')
+
+        data = {
+            'vol-size': str(size_mb) + 'm'
+        }
+
+        self.mgmt.request('volumes', 'PUT', data,
+                          name=str(volume.blockdevice_id))
+        self.data.rescan_scsi()
+
+    def detach_volume(self, blockdevice_id):
+        """
+        :param: volume id = blockdevice_id
+        :raises: unknownvolume exception if not found
+        """
+        vol = self._get_vol_details(blockdevice_id)
+        if vol.attached_to is not None:
+            self.data.destroy_lun_map(blockdevice_id,
+                                      self._compute_instance_id)
+            self.data.rescan_scsi()
+        else:
+            Message.new(Info="Volume" + blockdevice_id +
+                        "not attached").write(_logger)
+            raise UnattachedVolume(blockdevice_id)
+
+    def list_volumes(self):
+        """
+        Return ``BlockDeviceVolume`` instances for all the files in the
+        ``unattached`` directory and all per-host directories.
+
+        See ``IBlockDeviceAPI.list_volumes`` for parameter and return type
+        documentation.
+        """
+        volumes = []
+        try:
+            # Query for volume folder by name VOL_FLOCKER
+            # and get list of volumes. The array may have
+            # other volumes not owned by Flocker
+            # vol_folder = self.mgmt.request(VnxMgmt.VOLUME_FOLDERS,
+            #                              name=VnxMgmt.BASE_PATH +
+            #                              str(self._cluster_id))['content']
+            # Get the number of volumes
+            # Message.new(NoOfVolumesFound=vol_folder['num-of-vols']) \
+            #    .write(_logger)
+            # if int(vol_folder['num-of-vols']) > 0:
+            #   for vol in vol_folder['direct-list']:
+                    # Message.new(VolumeName=vol[1]).write(_logger)
+            #       volume = self._get_vol_details(vol[1])
+            #       volumes.append(volume)
+            #       # Message.new(volume=volume).write(_logger)
+            pass
+        except Exception:
+            pass
+        #   # Message.new(Error=exe).write(_logger)
+
+        return volumes
+
+    def get_device_path(self, blockdevice_id):
+        """
+        :param blockdevice_id:
+        :return:the device path
+        """
+        # Query LunID from VNX
+        lunid = self.data.get_lun_map(blockdevice_id)
+        output = check_output([b"/usr/bin/lsscsi"])
+        # lsscsi gives output in the following form:
+        # [0:0:0:0]    disk    ATA      ST91000640NS     SN03  /dev/sdp
+        # [1:0:0:0]    disk    DGC      LUNZ             0532  /dev/sdb
+        # [1:0:1:0]    disk    DGC      LUNZ             0532  /dev/sdc
+        # [8:0:0:0]    disk    MSFT     Virtual HD       6.3   /dev/sdd
+        # [9:0:0:0]    disk VNX  XtremApp         2400     /dev/sde
+
+        # We shall parse the output above and give out path /dev/sde as in
+        # this case
+        for row in output.split('\n'):
+            if re.search(r'XtremApp', row, re.I):
+                if re.search(r'\d:\d:\d:' + str(lunid), row, re.I):
+                    device_name = re.findall(r'/\w+', row, re.I)
+                    if device_name:
+                        return FilePath(device_name[0] + device_name[1])
+
+        raise UnknownVolume(blockdevice_id)
 
 
-def getEMCVnxCli(prtcl, configuration=None):
+def getEMCVnxBlockDeviceAPI(prtcl, configuration=None):
     configuration.append_config_values(loc_opts)
-    return EMCVnxCliBase(prtcl, configuration=configuration)
+    return EMCVnxBlockDeviceAPI(prtcl, configuration=configuration)
 
 
 class CreateSMPTask(task.Task):
