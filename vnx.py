@@ -315,7 +315,7 @@ class VnxMgmt():
                                   "return value" + str_result).write(_logger)
 
 
-class VnxiSCSIDriver():
+class VnxiSCSIDriver(cluster_id, compute_instance_id, configuration):
     """Executes commands relating to ISCSI volumes.
 
     We make use of model provider properties as follows:
@@ -325,64 +325,17 @@ class VnxiSCSIDriver():
       `CHAP` is the only auth_method in use at the moment.
     """
 
-    def __init__(self, mgmt, compute_instance_id):
+    def __init__(self, compute_instance_id):
         """
         :param: mgmt - The EMC VNX XMS (management interface object)
         """
+        self.cluster_id = cluster_id
+        self.compute_instance_id = compute_instance_id
+        self.configuration = configuration
 
-        self.cli = getEMCVnxCli('iSCSI', configuration=self.configuration)
-
-    def initialize_connection(self):
-        """
-        The model followed with EMC VNX can be explained as follows:
-        Each node has a initiator group created, when logged in for the
-        first time.  To this initiator group the initiator name is added
-        for all the interfaces available on the node. The volumes are
-        associated with the initiator group, thus making sure multipathing
-        is established automatically.
-        """
-
-        sys = self.mgmt.request('clusters', 'GET', idx=1)['content']
-        use_chap = (sys.get('chap-authentication-mode', 'disabled') !=
-                    'disabled')
-        dicovery_chap = (sys.get('chap-discovery-mode', 'disabled') !=
-                         'disabled')
-        initiator = self._get_initiator()
-        try:
-            # check if the IG already exists
-            self.mgmt.request('initiator-groups', 'GET',
-                              name=self._get_ig())['content']
-        except DeviceExceptionObjNotFound:
-            # create an initiator group to hold the the initiator
-            data = {'ig-name': self._get_ig()}
-            self.mgmt.request('initiator-groups', 'POST', data)
-        try:
-            init = self.mgmt.request('initiators', 'GET',
-                                     name=initiator)['content']
-            if use_chap:
-                chap_passwd = init['chap-authentication-initiator-'
-                                   'password']
-                # delete the initiator to create a new one with password
-                if not chap_passwd:
-                    Message.new(Info='initiator has no password while using \
-                        chap removing it')
-                    self.mgmt.request('initiators', 'DELETE', name=initiator)
-                    # check if the initiator already exists
-                    raise DeviceExceptionObjNotFound
-        except DeviceExceptionObjNotFound:
-            # create an initiator
-            data = {'initiator-name': initiator,
-                    'ig-id': self._get_ig(),
-                    'port-address': initiator}
-            if use_chap:
-                data['initiator-authentication-user-name'] = 'chap_user'
-                chap_passwd = self._get_password()
-                data['initiator-authentication-password'] = chap_passwd
-            if dicovery_chap:
-                data['initiator-discovery-user-name'] = 'chap_user'
-                data['initiator-discovery-'
-                     'password'] = self._get_password()
-            self.mgmt.request('initiators', 'POST', data)
+        # Get VNX CLI and create storage group for Flocker cluster.
+        self.cli = getEMCVnxCli('iSCSI', configuration=configuration)
+        self.cli.assure_storage_group(cluster_id)
 
     def create_lun_map(self, blockdevice_id, compute_instance_id):
         """
@@ -545,7 +498,9 @@ class EMCVnxBlockDeviceAPI(object):
             allocation_unit = 1
         self._allocation_unit = allocation_unit
         self.mgmt = VnxMgmt(configuration)
-        self.data = VnxiSCSIDriver(self.mgmt, self._compute_instance_id)
+        self.data = VnxiSCSIDriver(self.mgmt,
+                                   self._cluster_id,
+                                   self._compute_instance_id)
         self._initialize_setup()
 
     def _check_for_volume_folder(self):
