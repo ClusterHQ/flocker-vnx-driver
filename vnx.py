@@ -2013,37 +2013,6 @@ class EMCVnxBlockDeviceAPI(object):
             self.array_serial = self._client.get_array_serial()
         return self.array_serial['array_serial']
 
-    def _construct_store_spec(self, volume, snapshot):
-        if snapshot['cgsnapshot_id']:
-            snapshot_name = snapshot['cgsnapshot_id']
-        else:
-            snapshot_name = snapshot['name']
-        source_volume_name = snapshot['volume_name']
-        volume_name = volume['name']
-        volume_size = snapshot['volume_size']
-        dest_volume_name = volume_name + '_dest'
-        snap_name = snapshot_name
-        pool_name = self.get_target_storagepool(volume, snapshot['volume'])
-        specs = self.get_volumetype_extraspecs(volume)
-        provisioning, tiering, snapcopy = self._get_extra_spec_value(specs)
-        if snapcopy == 'true':
-            snap_name = self._construct_snap_as_vol_name(volume)
-        store_spec = {
-            'source_vol_name': source_volume_name,
-            'volume': volume,
-            'src_snap_name': snapshot_name,
-            'snap_name': snap_name,
-            'dest_vol_name': dest_volume_name,
-            'pool_name': pool_name,
-            'provisioning': provisioning,
-            'tiering': tiering,
-            'snapcopy': snapcopy,
-            'volume_size': volume_size,
-            'client': self._client,
-            'ignore_pool_full_threshold': self.ignore_pool_full_threshold
-        }
-        return store_spec
-
     def _construct_snap_as_vol_name(self, volume):
         return self.snap_as_vol_prefix + volume['id']
 
@@ -2062,6 +2031,7 @@ class EMCVnxBlockDeviceAPI(object):
 
         # defining CLI command
         command_create_lun = ['lun', '-create',
+                              '-type', 'thin',
                               '-capacity', size,
                               '-sq', 'gb',
                               # '-poolName', pool,
@@ -2162,33 +2132,27 @@ class EMCVnxBlockDeviceAPI(object):
             raise exception.VolumeBackendAPIException(data=msg)
         return
 
-    def delete_volume(self, volume, force_delete=False):
-        """Deletes an EMC volume."""
+    def delete_volume(self, blockdevice_id, force_delete=False):
+        """
+        Deletes a VNX volume.
+        :param: blockdevice_id - the volume id
+        :raise: UnknownVolume is not found
+        """
+        name = str(blockdevice_id)
         try:
-            self._client.delete_lun(volume['name'])
-        except exception.EMCVnxCLICmdError as ex:
-            orig_out = "\n".join(ex.kwargs["out"])
-            if ((force_delete or self.force_delete_lun_in_sg) and
-                    VNXError.has_error(orig_out, VNXError.LUN_IN_SG)):
-                LOG.warning(_LW('LUN corresponding to %s is still '
-                                'in some Storage Groups.'
-                                'Try to bring the LUN out of Storage Groups '
-                                'and retry the deletion.'),
-                            volume['name'])
-                lun_id = self.get_lun_id(volume)
-                for hlu, sg in self._client.get_hlus(lun_id):
-                    self._client.remove_hlu_from_storagegroup(hlu, sg)
-                self._client.delete_lun(volume['name'])
-            else:
-                with excutils.save_and_reraise_exception():
-                    # Reraise the original exception
-                    pass
-        if volume['provider_location']:
-            lun_type = self._extract_provider_location_for_lun(
-                volume['provider_location'], 'type')
-            if lun_type == 'smp':
-                self._client.delete_snapshot(
-                    self._construct_snap_as_vol_name(volume))
+            Message.new(Info="Destroying Volume" + name). \
+                write(_logger)
+            self._client.delete_lun(name)
+        except exception.EMCVnxCLICmdError:
+            # TODO: update get_lun_id to use name.
+            lun_id = self.get_lun_id(name)
+            for hlu, sg in self._client.get_hlus(lun_id):
+                self._client.remove_hlu_from_storagegroup(hlu, sg)
+            self._client.delete_lun(name)
+        else:
+            with excutils.save_and_reraise_exception():
+                # Reraise the original exception
+                pass
 
     def _get_original_status(self, volume):
         if not volume['volume_attachment']:
@@ -3501,19 +3465,6 @@ class EMCVnxBlockDeviceAPI(object):
         Return allocation unit
         """
         return self._allocation_unit
-
-    def destroy_volume(self, blockdevice_id):
-        """
-        Destroy the storage for the given unattached volume.
-        :param: blockdevice_id - the volume id
-        :raise: UnknownVolume is not found
-        """
-        try:
-            Message.new(Info="Destroying Volume" + str(blockdevice_id)). \
-                write(_logger)
-            self.mgmt.request('volumes', 'DELETE', name=blockdevice_id)
-        except DeviceExceptionObjNotFound:
-            raise UnknownVolume(blockdevice_id)
 
     def attach_volume(self, blockdevice_id, attach_to):
         """
