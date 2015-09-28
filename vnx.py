@@ -32,12 +32,9 @@ from oslo_utils import excutils
 from oslo_utils import timeutils
 import six
 from six.moves import range
-import taskflow.engines
-from taskflow.patterns import linear_flow
 from taskflow import task
 from taskflow.types import failure
 
-from cinder import exception
 from cinder.i18n import _, _LE, _LI, _LW
 from cinder import objects
 from cinder import utils
@@ -161,6 +158,11 @@ class VolumeExists(VolumeException):
 class VolumeAttached(VolumeException):
     """
     Attempting to destroy an attached volume
+    """
+
+
+class EMCVnxCLICmdError(Exception):
+    """
     """
 
 
@@ -450,7 +452,6 @@ class CommandLineHelper(object):
             err_msg = _('naviseccli_path: Could not find '
                         'NAVISECCLI tool %(path)s.') % {'path': navisecclipath}
             LOG.error(err_msg)
-            raise exception.VolumeBackendAPIException(data=err_msg)
 
         self.command = (navisecclipath, '-address')
         self.active_storage_ip = configuration.san_ip
@@ -464,7 +465,6 @@ class CommandLineHelper(object):
             err_msg = _('san_ip: Mandatory field configuration. '
                         'san_ip is not set.')
             LOG.error(err_msg)
-            raise exception.VolumeBackendAPIException(data=err_msg)
 
         self.credentials = ()
         storage_username = configuration.san_login
@@ -478,7 +478,6 @@ class CommandLineHelper(object):
             err_msg = (_('Invalid VNX authentication type: %s')
                        % storage_auth_type)
             LOG.error(err_msg)
-            raise exception.VolumeBackendAPIException(data=err_msg)
         # if there is security file path provided, use this security file
         if storage_vnx_security_file:
             self.credentials = ('-secfilepath', storage_vnx_security_file)
@@ -534,10 +533,10 @@ class CommandLineHelper(object):
                 '-tieringPolicy', 'noMovement']}
 
     def _raise_cli_error(self, cmd=None, rc=None, out='', **kwargs):
-        raise exception.EMCVnxCLICmdError(cmd=cmd,
-                                          rc=rc,
-                                          out=out.split('\n'),
-                                          **kwargs)
+        raise EMCVnxCLICmdError(cmd=cmd,
+                                rc=rc,
+                                out=out.split('\n'),
+                                **kwargs)
 
     def create_lun_with_advance_feature(self, pool, name, size,
                                         provisioning, tiering,
@@ -568,7 +567,7 @@ class CommandLineHelper(object):
             if provisioning == 'compressed':
                 self.enable_or_disable_compression_on_lun(
                     name, 'on')
-        except exception.EMCVnxCLICmdError as ex:
+        except EMCVnxCLICmdError as ex:
             with excutils.save_and_reraise_exception():
                 self.delete_lun(name)
                 LOG.error(_LE("Error on enable compression on lun %s."),
@@ -579,7 +578,7 @@ class CommandLineHelper(object):
             if consistencygroup_id:
                 self.add_lun_to_consistency_group(
                     consistencygroup_id, data['lun_id'])
-        except exception.EMCVnxCLICmdError as ex:
+        except EMCVnxCLICmdError as ex:
             with excutils.save_and_reraise_exception():
                 self.delete_lun(name)
                 LOG.error(_LE("Error on adding lun to consistency"
@@ -612,12 +611,12 @@ class CommandLineHelper(object):
                         " %(lun_state)s state."
                         ) % {'lun_name': lun_data[self.LUN_NAME.key],
                              'lun_state': lun_state}
-                raise exception.VolumeBackendAPIException(data=msg)
+                raise VolumeBackendAPIException(data=msg)
 
         def lun_is_ready():
             try:
                 data = self.get_lun_by_name(name, self.LUN_ALL, False)
-            except exception.EMCVnxCLICmdError as ex:
+            except EMCVnxCLICmdError as ex:
                 orig_out = "\n".join(ex.kwargs["out"])
                 if VNXError.has_error(orig_out, VNXError.GENERAL_NOT_FOUND):
                     return False
@@ -629,7 +628,7 @@ class CommandLineHelper(object):
                                    None,
                                    INTERVAL_5_SEC,
                                    lambda ex:
-                                   isinstance(ex, exception.EMCVnxCLICmdError))
+                                   isinstance(ex, EMCVnxCLICmdError))
         lun = self.get_lun_by_name(name, self.LUN_ALL, False)
         return lun
 
@@ -699,7 +698,7 @@ class CommandLineHelper(object):
                 msg = (_('CommandLineHelper._wait_for_a_condition: %s timeout')
                        % testmethod.__name__)
                 LOG.error(msg)
-                raise exception.VolumeBackendAPIException(data=msg)
+                raise VolumeBackendAPIException(data=msg)
 
         timer = loopingcall.FixedIntervalLoopingCall(_inner)
         timer.start(interval=interval).wait()
@@ -753,26 +752,6 @@ class CommandLineHelper(object):
             out, rc = self.command_execute(*command_modify_lun)
             if rc != 0:
                 self._raise_cli_error(command_modify_lun, rc, out)
-
-    def create_consistencygroup(self, cg_name, members=None, poll=False):
-        """create the consistency group."""
-        command_create_cg = ('snap', '-group',
-                             '-create',
-                             '-name', cg_name,
-                             '-allowSnapAutoDelete', 'no')
-        if members:
-            command_create_cg += ('-res', ','.join(map(six.text_type,
-                                                       members)))
-
-        out, rc = self.command_execute(*command_create_cg, poll=poll)
-        if rc != 0:
-            # Ignore the error if consistency group already exists
-            if VNXError.has_error(out, VNXError.CG_EXISTED):
-                LOG.warning(_LW('Consistency group %(name)s already '
-                                'exists. Message: %(msg)s'),
-                            {'name': cg_name, 'msg': out})
-            else:
-                self._raise_cli_error(command_create_cg, rc, out)
 
     def get_consistency_group_by_name(self, cg_name):
         cmd = ('snap', '-group', '-list', '-id', cg_name)
@@ -837,26 +816,6 @@ class CommandLineHelper(object):
                                                   'cg_name': cg_name})
             self._raise_cli_error(replace_luns_cmd, rc, out)
 
-    def delete_consistencygroup(self, cg_name):
-        delete_cg_cmd = ('-np', 'snap', '-group',
-                         '-destroy', '-id', cg_name)
-        out, rc = self.command_execute(*delete_cg_cmd)
-        if rc != 0:
-            # Ignore the error if CG doesn't exist
-            if VNXError.has_error(out, VNXError.GENERAL_NOT_FOUND):
-                LOG.warning(_LW("CG %(cg_name)s does not exist. "
-                                "Message: %(msg)s"),
-                            {'cg_name': cg_name, 'msg': out})
-            elif VNXError.has_error(out, VNXError.CG_IS_DELETING):
-                LOG.warning(_LW("CG %(cg_name)s is deleting. "
-                                "Message: %(msg)s"),
-                            {'cg_name': cg_name, 'msg': out})
-            else:
-                self._raise_cli_error(delete_cg_cmd, rc, out)
-        else:
-            LOG.info(_LI('Consistency group %s was deleted '
-                         'successfully.'), cg_name)
-
     def create_cgsnapshot(self, cgsnapshot):
         """Create a cgsnapshot (snap group)."""
         cg_name = cgsnapshot['consistencygroup_id']
@@ -913,7 +872,7 @@ class CommandLineHelper(object):
                     self._raise_cli_error(command_create_snapshot, rc, out)
         else:
             msg = _('Failed to create snapshot as no LUN ID is specified')
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
 
     def copy_snapshot(self, src_snap_name, new_name):
         command_copy_snapshot = ('snap', '-copy',
@@ -1052,7 +1011,7 @@ class CommandLineHelper(object):
         try:
             self.migrate_lun(src_id, dst_id)
             return True
-        except exception.EMCVnxCLICmdError as ex:
+        except EMCVnxCLICmdError as ex:
             migration_succeed = False
             orig_out = "\n".join(ex.kwargs["out"])
             if self._is_sp_unavailable_error(orig_out):
@@ -1099,7 +1058,7 @@ class CommandLineHelper(object):
                         "STOPPED" in current_state):
                     reason = _("Migration of LUN %s has been stopped or"
                                " faulted.") % src_id
-                    raise exception.VolumeBackendAPIException(data=reason)
+                    raise VolumeBackendAPIException(data=reason)
                 if ("TRANSITIONING" in current_state or
                         "MIGRATING" in current_state):
                     LOG.debug("Migration of LUN %(src_id)s in process "
@@ -1135,9 +1094,9 @@ class CommandLineHelper(object):
                 migration_is_ready,
                 interval=INTERVAL_30_SEC,
                 ignorable_exception_arbiter=lambda ex:
-                type(ex) is not exception.VolumeBackendAPIException)
+                type(ex) is not VolumeBackendAPIException)
         # Migration cancellation for clean up
-        except exception.VolumeBackendAPIException:
+        except VolumeBackendAPIException:
             with excutils.save_and_reraise_exception():
                 LOG.error(_LE("Migration of LUN %s failed to complete."),
                           src_id)
@@ -1859,7 +1818,7 @@ class EMCVnxBlockDeviceAPI(object):
     VERSION = '0.1'
     driver_name = 'vnx'
 
-    def __init__(self, prtcl, configuration, cluster_id,
+    def __init__(self, cluster_id, prtcl, configuration,
                  compute_instance_id=socket.gethostname(),
                  allocation_unit=None):
         """
@@ -1937,7 +1896,7 @@ class EMCVnxBlockDeviceAPI(object):
                 msg = _("All the specified storage pools to be managed "
                         "do not exist. Please check your configuration. "
                         "Non-existent pools: %s") % ",".join(un_exist_pools)
-                raise exception.VolumeBackendAPIException(data=msg)
+                raise VolumeBackendAPIException(data=msg)
             if un_exist_pools:
                 LOG.warning(_LW("The following specified storage pools "
                                 "do not exist: %(unexist)s. "
@@ -1987,7 +1946,7 @@ class EMCVnxBlockDeviceAPI(object):
                     'for io_port_list.') % {'protocol': self.protocol,
                                             'port': ','.join(invalid_ports)}
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
         return valid_ports
 
     def _validate_iscsi_port(self, sp, port_id, vport_id, cmd_output):
@@ -2068,7 +2027,7 @@ class EMCVnxBlockDeviceAPI(object):
         elif extra_spec not in valid_values:
             msg = _("The extra_spec: %s is invalid.") % extra_spec
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
         return
 
     def _get_extra_spec_value(self, extra_specs):
@@ -2107,29 +2066,29 @@ class EMCVnxBlockDeviceAPI(object):
         if provisioning == 'deduplicated' and tiering != 'none':
             msg = _("deduplicated and auto tiering can't be both enabled.")
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
         elif provisioning == 'compressed' and '-Compression' not in enablers:
             msg = _("Compression Enabler is not installed. "
                     "Can not create compressed volume.")
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
         elif provisioning == 'deduplicated' and \
                 '-Deduplication' not in enablers:
             msg = _("Deduplication Enabler is not installed."
                     " Can not create deduplicated volume")
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
         elif provisioning in ['thin', 'deduplicated', 'compressed'] and \
                 '-ThinProvisioning' not in enablers:
             msg = _("ThinProvisioning Enabler is not installed. "
                     "Can not create thin volume")
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
         elif tiering != 'none' and '-FAST' not in enablers:
             msg = _("FAST VP Enabler is not installed. "
                     "Can't set tiering policy for the volume")
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
         return
 
     def delete_volume(self, blockdevice_id, force_delete=False):
@@ -2143,9 +2102,8 @@ class EMCVnxBlockDeviceAPI(object):
             Message.new(Info="Destroying Volume" + name). \
                 write(_logger)
             self._client.delete_lun(name)
-        except exception.EMCVnxCLICmdError:
-            # TODO: update get_lun_id to use name.
-            lun_id = self.get_lun_id(name)
+        except EMCVnxCLICmdError:
+            lun_id = self.get_lun_by_name(name)
             for hlu, sg in self._client.get_hlus(lun_id):
                 self._client.remove_hlu_from_storagegroup(hlu, sg)
             self._client.delete_lun(name)
@@ -2368,7 +2326,7 @@ class EMCVnxBlockDeviceAPI(object):
                      'snapshot mount point.')
                    % volume_name)
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
         LOG.info(_LI('Create snapshot: %(snapshot)s: volume: %(volume)s'),
                  {'snapshot': snapshot_name,
                   'volume': volume_name})
@@ -2376,7 +2334,7 @@ class EMCVnxBlockDeviceAPI(object):
 
         try:
             self._client.create_snapshot(lun_id, snapshot_name)
-        except exception.EMCVnxCLICmdError as ex:
+        except EMCVnxCLICmdError as ex:
             with excutils.save_and_reraise_exception(ex) as ctxt:
                 out = "\n".join(ex.kwargs["out"])
                 if VNXError.has_error(out, VNXError.LUN_IS_PREPARING):
@@ -2450,91 +2408,13 @@ class EMCVnxBlockDeviceAPI(object):
                                 "because VNX consistency group cannot "
                                 "accept compressed LUNs as members."
                                 ) % group['id']
-                        raise exception.VolumeBackendAPIException(data=msg)
+                        raise VolumeBackendAPIException(data=msg)
                     if snapcopy == 'true':
                         msg = _("Failed to create consistency group %s "
                                 "because VNX consistency group cannot "
                                 "enable copytype:snap=True on its members."
                                 ) % group['id']
-                        raise exception.VolumeBackendAPIException(data=msg)
-
-    def create_consistencygroup(self, context, group):
-        """Creates a consistency group."""
-        LOG.info(_LI('Start to create consistency group: %(group_name)s '
-                     'id: %(id)s'),
-                 {'group_name': group['name'], 'id': group['id']})
-
-        self._consistencygroup_creation_check(group)
-
-        model_update = {'status': 'available'}
-        try:
-            self._client.create_consistencygroup(group['id'])
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                LOG.error(_LE('Create consistency group %s failed.'),
-                          group['id'])
-
-        return model_update
-
-    def delete_consistencygroup(self, driver, context, group):
-        """Deletes a consistency group."""
-        cg_name = group['id']
-        volumes = driver.db.volume_get_all_by_group(context, group['id'])
-
-        model_update = {}
-        model_update['status'] = group['status']
-        LOG.info(_LI('Start to delete consistency group: %(cg_name)s'),
-                 {'cg_name': cg_name})
-        try:
-            self._client.delete_consistencygroup(cg_name)
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                LOG.error(_LE('Delete consistency group %s failed.'), cg_name)
-
-        for volume_ref in volumes:
-            try:
-                self._client.delete_lun(volume_ref['name'])
-                volume_ref['status'] = 'deleted'
-            except Exception:
-                volume_ref['status'] = 'error_deleting'
-                model_update['status'] = 'error_deleting'
-
-        return model_update, volumes
-
-    def update_consistencygroup(self, context,
-                                group,
-                                add_volumes,
-                                remove_volumes):
-        """Adds or removes LUN(s) to/from an existing consistency group"""
-        model_update = {'status': 'available'}
-        cg_name = group['id']
-        add_ids = [six.text_type(self.get_lun_id(vol))
-                   for vol in add_volumes] if add_volumes else []
-        remove_ids = [six.text_type(self.get_lun_id(vol))
-                      for vol in remove_volumes] if remove_volumes else []
-
-        data = self._client.get_consistency_group_by_name(cg_name)
-        ids_curr = data['Luns']
-        ids_later = []
-
-        if ids_curr:
-            ids_later.extend(ids_curr)
-        ids_later.extend(add_ids)
-        for remove_id in remove_ids:
-            if remove_id in ids_later:
-                ids_later.remove(remove_id)
-            else:
-                LOG.warning(_LW("LUN with id %(remove_id)s is not present "
-                                "in cg %(cg_name)s, skip it."),
-                            {'remove_id': remove_id, 'cg_name': cg_name})
-        # Remove all from cg
-        if not ids_later:
-            self._client.remove_luns_from_consistencygroup(cg_name,
-                                                           ids_curr)
-        else:
-            self._client.replace_luns_in_consistencygroup(cg_name,
-                                                          ids_later)
-        return model_update, None, None
+                        raise VolumeBackendAPIException(data=msg)
 
     def create_cgsnapshot(self, driver, context, cgsnapshot):
         """Creates a cgsnapshot (snap group)."""
@@ -2613,7 +2493,7 @@ class EMCVnxBlockDeviceAPI(object):
     def assure_host_in_storage_group(self, hostname, storage_group):
         try:
             self._client.connect_host_to_storage_group(hostname, storage_group)
-        except exception.EMCVnxCLICmdError as ex:
+        except EMCVnxCLICmdError as ex:
             if ex.kwargs["rc"] == 83:
                 # SG was not created or was destroyed by another concurrent
                 # operation before connected.
@@ -2645,7 +2525,7 @@ class EMCVnxBlockDeviceAPI(object):
                 msg = (_('Host %s has no iSCSI initiator')
                        % connector['host'])
                 LOG.error(msg)
-                raise exception.VolumeBackendAPIException(data=msg)
+                raise VolumeBackendAPIException(data=msg)
             else:
                 return ()
         return [connector['initiator']]
@@ -2655,7 +2535,7 @@ class EMCVnxBlockDeviceAPI(object):
             if self.protocol == 'FC':
                 msg = _('Host %s has no FC initiators') % connector['host']
                 LOG.error(msg)
-                raise exception.VolumeBackendAPIException(data=msg)
+                raise VolumeBackendAPIException(data=msg)
             else:
                 return ()
         wwnns = connector['wwnns']
@@ -2801,7 +2681,7 @@ class EMCVnxBlockDeviceAPI(object):
                 initiator_uids = self._extract_iscsi_uids(connector)
             elif self.protocol == 'FC':
                 initiator_uids = self._extract_fc_uids(connector)
-        except exception.VolumeBackendAPIException:
+        except VolumeBackendAPIException:
             LOG.warning(_LW("Failed to extract initiators of %s, so ignore "
                             "deregistration operation."),
                         connector['host'])
@@ -2890,7 +2770,7 @@ class EMCVnxBlockDeviceAPI(object):
         try:
             sgdata = self._client.get_storage_group(hostname,
                                                     poll=False)
-        except exception.EMCVnxCLICmdError as ex:
+        except EMCVnxCLICmdError as ex:
             if ex.kwargs["rc"] != 83:
                 raise
             # Storage Group has not existed yet
@@ -2933,7 +2813,7 @@ class EMCVnxBlockDeviceAPI(object):
                         self.hlu_cache[hostname] = {}
                     self.hlu_cache[hostname][lun_id] = hlu
                     return hlu, sgdata
-                except exception.EMCVnxCLICmdError as ex:
+                except EMCVnxCLICmdError as ex:
                     LOG.debug("Add HLU to storagegroup failed, retry %s",
                               tried)
             elif tried == 1:
@@ -2948,7 +2828,7 @@ class EMCVnxBlockDeviceAPI(object):
                          'Storage Group %(sg)s is rejected.')
                        % {'vol': volumename, 'sg': hostname})
                 LOG.error(msg)
-                raise exception.VolumeBackendAPIException(data=msg)
+                raise VolumeBackendAPIException(data=msg)
 
             # Need a full poll to get the real in time data
             # Query storage group with poll for retry
@@ -2964,7 +2844,7 @@ class EMCVnxBlockDeviceAPI(object):
              'sg': hostname,
              'retries': tried}
         LOG.error(msg)
-        raise exception.VolumeBackendAPIException(data=msg)
+        raise VolumeBackendAPIException(data=msg)
 
     def vnx_get_iscsi_properties(self, volume, connector, hlu, sg_raw_output):
         storage_group = connector['host']
@@ -3067,7 +2947,7 @@ class EMCVnxBlockDeviceAPI(object):
                 try:
                     lun_map = self.get_lun_map(hostname)
                     self.hlu_cache[hostname] = lun_map
-                except exception.EMCVnxCLICmdError as ex:
+                except EMCVnxCLICmdError as ex:
                     if ex.kwargs["rc"] == 83:
                         LOG.warning(_LW("Storage Group %s is not found. "
                                         "terminate_connection() is "
@@ -3140,56 +3020,6 @@ class EMCVnxBlockDeviceAPI(object):
         volume = {'name': smp_name, 'provider_location': None}
         self.delete_volume(volume, True)
 
-    def manage_existing_get_size(self, volume, existing_ref):
-        """Returns size of volume to be managed by manage_existing."""
-        if 'source-id' in existing_ref:
-            data = self._client.get_lun_by_id(
-                existing_ref['source-id'],
-                properties=self._client.LUN_WITH_POOL)
-        elif 'source-name' in existing_ref:
-            data = self._client.get_lun_by_name(
-                existing_ref['source-name'],
-                properties=self._client.LUN_WITH_POOL)
-        else:
-            reason = _('Reference must contain source-id or source-name key.')
-            raise exception.ManageExistingInvalidReference(
-                existing_ref=existing_ref, reason=reason)
-        target_pool = self.get_target_storagepool(volume)
-        if target_pool and data['pool'] != target_pool:
-            reason = (_('The imported lun %(lun_id)s is in pool %(lun_pool)s '
-                        'which is not managed by the host %(host)s.')
-                      % {'lun_id': data['lun_id'],
-                         'lun_pool': data['pool'],
-                         'host': volume['host']})
-            raise exception.ManageExistingInvalidReference(
-                existing_ref=existing_ref, reason=reason)
-        return data['total_capacity_gb']
-
-    def manage_existing(self, volume, manage_existing_ref):
-        """Imports the existing backend storage object as a volume.
-
-        manage_existing_ref:{
-            'source-id':<lun id in VNX>
-        }
-        or
-        manage_existing_ref:{
-            'source-name':<lun name in VNX>
-        }
-        """
-        if 'source-id' in manage_existing_ref:
-            lun_id = manage_existing_ref['source-id']
-        elif 'source-name' in manage_existing_ref:
-            lun_id = self._client.get_lun_by_name(
-                manage_existing_ref['source-name'], poll=False)['lun_id']
-        else:
-            reason = _('Reference must contain source-id or source-name key.')
-            raise exception.ManageExistingInvalidReference(
-                existing_ref=manage_existing_ref, reason=reason)
-        self._client.rename_lun(lun_id, volume['name'])
-        model_update = {'provider_location':
-                        self._build_provider_location(lun_id)}
-        return model_update
-
     def get_login_ports(self, connector, io_ports=None):
         return self._client.get_login_ports(connector['host'],
                                             connector['wwpns'],
@@ -3235,99 +3065,6 @@ class EMCVnxBlockDeviceAPI(object):
         """Unmanages a volume"""
         pass
 
-    def create_consistencygroup_from_src(self, context, group, volumes,
-                                         cgsnapshot=None, snapshots=None):
-        """Creates a consistency group from cgsnapshot."""
-
-        if not cgsnapshot or not snapshots:
-            msg = _("create_consistencygroup_from_src only supports a "
-                    "cgsnapshot source, other sources cannot be used.")
-            raise exception.InvalidInput(msg)
-
-        flow_name = 'create_consistencygroup_from_cgsnapshot'
-        work_flow = linear_flow.Flow(flow_name)
-        copied_snapshot_name = 'temp_snapshot_for_%s' % group['id']
-        store_spec = {
-            'group': group,
-            'src_snap_name': cgsnapshot['id'],
-            'snap_name': copied_snapshot_name,
-            'client': self._client
-        }
-
-        work_flow.add(CopySnapshotTask(),
-                      AllowReadWriteOnSnapshotTask())
-
-        # Add tasks for each volumes in the consistency group
-        lun_id_key_template = 'new_lun_id_%s'
-        lun_data_key_template = 'vol_%s'
-        volume_model_updates = []
-
-        for i, (volume, snap) in enumerate(zip(volumes, snapshots)):
-            specs = self.get_volumetype_extraspecs(volume)
-            provisioning, tiering, snapcopy = (
-                self._get_and_validate_extra_specs(specs))
-            pool_name = self. get_target_storagepool(volume, snap['volume'])
-            sub_store_spec = {
-                'volume': volume,
-                'source_vol_name': snap['volume_name'],
-                'pool_name': pool_name,
-                'dest_vol_name': volume['name'] + '_dest',
-                'volume_size': volume['size'],
-                'provisioning': provisioning,
-                'tiering': tiering,
-                'ignore_pool_full_threshold': self.ignore_pool_full_threshold,
-                'snapcopy': snapcopy
-            }
-            work_flow.add(
-                CreateSMPTask(name="CreateSMPTask%s" % i,
-                              inject=sub_store_spec),
-                AttachSnapTask(name="AttachSnapTask%s" % i,
-                               inject=sub_store_spec),
-                CreateDestLunTask(name="CreateDestLunTask%s" % i,
-                                  providers=lun_data_key_template % i,
-                                  inject=sub_store_spec),
-                MigrateLunTask(name="MigrateLunTask%s" % i,
-                               providers=lun_id_key_template % i,
-                               inject=sub_store_spec,
-                               rebind={'lun_data': lun_data_key_template % i},
-                               wait_for_completion=False))
-
-            volume_model_updates.append({'id': volume['id']})
-            volume_host = volume['host']
-            host = vol_utils.extract_host(volume_host, 'backend')
-            host_and_pool = vol_utils.append_host(host, pool_name)
-            if volume_host != host_and_pool:
-                volume_model_updates[i]['host'] = host_and_pool
-
-        work_flow.add(WaitMigrationsCompleteTask(lun_id_key_template,
-                                                 len(volumes)),
-                      CreateConsistencyGroupTask(lun_id_key_template,
-                                                 len(volumes)))
-
-        flow_engine = taskflow.engines.load(work_flow, store=store_spec)
-        flow_engine.run()
-
-        # Delete copied snapshot
-        try:
-            self._client.delete_cgsnapshot(copied_snapshot_name)
-        except exception.EMCVnxCLICmdError as ex:
-            LOG.warning(_LW('Delete the temporary cgsnapshot %(name)s failed. '
-                            'This temporary cgsnapshot can be deleted '
-                            'manually. Consistency group %(cg)s is created '
-                            'successfully from cgsnapshot %(cgsnapshot)s. '
-                            'Message: %(msg)s'),
-                        {'name': copied_snapshot_name,
-                         'cg': group['id'],
-                         'cgsnapshot': cgsnapshot['id'],
-                         'msg': ex.kwargs['out']})
-
-        for i, update in enumerate(volume_model_updates):
-            new_lun_id = flow_engine.storage.fetch(lun_id_key_template % i)
-            update['provider_location'] = (
-                self._build_provider_location(new_lun_id))
-
-        return None, volume_model_updates
-
     def get_target_storagepool(self, volume, source_volume=None):
         pool = vol_utils.extract_host(volume['host'], 'pool')
 
@@ -3358,7 +3095,7 @@ class EMCVnxBlockDeviceAPI(object):
                 msg = (_("Failed to find storage pool for source volume %s.")
                        % source_volume['name'])
                 LOG.error(msg)
-                raise exception.VolumeBackendAPIException(data=msg)
+                raise VolumeBackendAPIException(data=msg)
             pool = data[self._client.LUN_POOL.key]
 
         if self.storage_pools and pool not in self.storage_pools:
@@ -3366,7 +3103,7 @@ class EMCVnxBlockDeviceAPI(object):
                      "is managed by the current host.")
                    % source_volume['name'])
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
         return pool
 
     def _check_version(self):
@@ -3583,9 +3320,15 @@ class EMCVnxBlockDeviceAPI(object):
         raise UnknownVolume(blockdevice_id)
 
 
-def getEMCVnxBlockDeviceAPI(prtcl, configuration=None):
+def emc_vnx_api(cluster_id, prtcl, configuration=None):
     configuration.append_config_values(loc_opts)
-    return EMCVnxBlockDeviceAPI(prtcl, configuration=configuration)
+    return EMCVnxBlockDeviceAPI(cluster_id, prtcl, configuration=configuration)
+    # return EMCVnxBlockDeviceAPI(prtcl,
+    # configuration=ArrayConfiguration(xms_user, xms_password, xms_ip),
+    #   cluster_id=cluster_id,
+    #   compute_instance_id=unicode(socket.gethostname()),
+    #   allocation_unit=1
+    #
 
 
 class CreateSMPTask(task.Task):
@@ -3632,7 +3375,7 @@ class AttachSnapTask(task.Task):
                         volume['name'])
             try:
                 client.detach_mount_point(volume['name'])
-            except exception.EMCVnxCLICmdError as ex:
+            except EMCVnxCLICmdError as ex:
                 with excutils.save_and_reraise_exception() as ctxt:
                     is_not_smp_err = (
                         ex.kwargs["rc"] == 163 and
@@ -3701,7 +3444,7 @@ class MigrateLunTask(task.Task):
                      " and dest vol %(dst)s.") %
                    {'src': new_smp_id, 'dst': dest_vol_lun_id})
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise VolumeBackendAPIException(data=msg)
 
         return new_smp_id
 
@@ -3775,21 +3518,6 @@ class AllowReadWriteOnSnapshotTask(task.Task):
         client.allow_snapshot_readwrite_and_autodelete(snap_name)
 
 
-class CreateConsistencyGroupTask(task.Task):
-    """Task to create a consistency group."""
-    def __init__(self, lun_id_key_template, num_of_members):
-        self.lun_id_keys = set(
-            [lun_id_key_template % i for i in range(num_of_members)])
-        super(CreateConsistencyGroupTask, self).__init__(
-            requires=self.lun_id_keys)
-
-    def execute(self, client, group, *args, **kwargs):
-        LOG.debug('CreateConsistencyGroupTask.execute')
-        lun_ids = [kwargs[key] for key in self.lun_id_keys]
-        client.create_consistencygroup(group['id'], lun_ids,
-                                       poll=True)
-
-
 class WaitMigrationsCompleteTask(task.Task):
     """Task to wait migrations to be completed."""
     def __init__(self, lun_id_key_template, num_of_members):
@@ -3805,4 +3533,4 @@ class WaitMigrationsCompleteTask(task.Task):
             migrated = client.verify_lun_migration(lun_id)
             if not migrated:
                 msg = _("Migrate volume %(src)s failed.") % {'src': lun_id}
-                raise exception.VolumeBackendAPIException(data=msg)
+                raise VolumeBackendAPIException(data=msg)
