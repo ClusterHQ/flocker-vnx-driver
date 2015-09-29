@@ -3155,9 +3155,73 @@ class CopySnapshotTask(task.Task):
                          'source_name': src_snap_name})
             client.delete_snapshot(snap_name)
 
+    def rescan_scsi(self):
+        """
+        Rescan SCSI bus. This is needed in situations:
+            - Resize of volumes
+            - Detach of volumes
+            - Possibly creation of new volumes
+        :return:none
+        """
+        channel_number = self._get_channel_number()
+        # Check for error condition
+        if channel_number < 0:
+            Message.new(error="iSCSI login not done for XtremIO bailing out") \
+                .write(_logger)
+            raise DeviceException
+        else:
+            check_output(["rescan-scsi-bus", "-r", "-c", channel_number])
 
-class AllowReadWriteOnSnapshotTask(task.Task):
-    """Task to modify a Snapshot to allow ReadWrite on it."""
-    def execute(self, client, snap_name, *args, **kwargs):
-        LOG.debug('AllowReadWriteOnSnapshotTask.execute')
-        client.allow_snapshot_readwrite_and_autodelete(snap_name)
+    def _get_channel_number(self):
+        """
+        Query scsi to get channel number of XtremIO devices.
+        Right now it supports only one XtremIO connected array
+        :return: channel number
+        """
+        output = check_output([b"/usr/bin/lsscsi"])
+        # lsscsi gives output in the following form:
+        # [0:0:0:0]    disk    ATA      ST91000640NS     SN03  /dev/sdp
+        # [1:0:0:0]    disk    DGC      LUNZ             0532  /dev/sdb
+        # [1:0:1:0]    disk    DGC      LUNZ             0532  /dev/sdc
+        # [8:0:0:0]    disk    MSFT     Virtual HD       6.3   /dev/sdd
+        # [9:0:0:0]    disk XtremIO  XtremApp         2400     /dev/sde
+
+        # We shall parse the output above and to give out channel number
+        # as 9
+        for row in output.split('\n'):
+            if re.search(r'XtremApp', row, re.I):
+                channel_row = re.search('\d+', row)
+                if channel_row:
+                    channel_number = channel_row.group()
+                    return channel_number
+
+        # Did not find channel number of xtremIO
+        # The number cannot be negative
+        return -1
+
+    def _get_initiator(self):
+        """
+        Initiator name of the current host
+        """
+        if self._connector['initiator'] is not None:
+            return self._connector
+        else:
+            # TODO there couldbe multiple interfaces
+            iscsin = os.popen('cat %s' % INITIATOR_FILE).read()
+            match = re.search('InitiatorName=.*', iscsin)
+            if len(match.group(0)) > 13:
+                self._connector['initiator'] = match.group(0)[14:]
+        return self._connector['initiator']
+
+    def _get_ig(self):
+        """
+        Initiator group name on XtremIO
+        """
+        return self._connector['ig']
+
+    def _get_password(self):
+        """
+        :return: Returns chap password
+        """
+        # We do not support chap protocol right now
+        return 'password'
