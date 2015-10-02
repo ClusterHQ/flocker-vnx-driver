@@ -15,7 +15,7 @@ from bitmath import GiB
 
 from flocker.testtools import skip_except
 
-from .vnx import EMCVnxBlockDeviceAPI
+from vnx import EMCVnxBlockDeviceAPI
 
 from flocker.node.agents.test.test_blockdevice import (
     make_iblockdeviceapi_tests
