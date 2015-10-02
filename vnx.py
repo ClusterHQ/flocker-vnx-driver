@@ -27,7 +27,7 @@ _logger = Logger()
 
 
 def vnx_api(cluster_id, user, password, ip, pool):
-    return EMCVNXBlockAPI(cluster_id, user, password, ip, pool)
+    return EMCVNXBlockDeviceAPI(cluster_id, user, password, ip, pool)
 
 def rescan_iscsi(number=None):
     cmd = ["rescan-scsi-bus", "-r", "-c"]
@@ -41,7 +41,7 @@ def get_iqn():
 
 
 @implementer(IBlockDeviceAPI)
-class EMCVNXBlockDeviceAPI(object):
+class EMCVnxBlockDeviceAPI(object):
 
     VERSION = '0.1'
     driver_name = 'VNX'
