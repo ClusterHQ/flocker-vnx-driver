@@ -7,14 +7,15 @@ Functional tests for
 using a VNX cluster.
 """
 
+import os
+import yaml
 from uuid import uuid4
 
 from bitmath import GiB
 
 from flocker.testtools import skip_except
 
-from .testtools_emc_vnx import tidy_vnx_client_for_test
-from .vnx import emc_vnx_api
+from .vnx import EMCVnxBlockDeviceAPI
 
 from flocker.node.agents.test.test_blockdevice import (
     make_iblockdeviceapi_tests
@@ -27,14 +28,14 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
 
     :returns: A ``EMCVnxBlockDeviceAPI`` instance
     """
-
-    client, pd, sp = tidy_vnx_client_for_test(test_case)
-    return emc_vnx_api(
-        client,
-        cluster_id,
-        pd,
-        sp
-    )
+    config_file_path = os.environ.get('VNX_CONFIG_FILE')
+    config_file = open(config_file_path)
+    config = yaml.load(config_file.read())
+    user = config['USER']
+    password = config['PASSWORD']
+    ip = config['IP']
+    pool = config['POOL']
+    return EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool)
 
 
 # We could remove this, all tests are covered

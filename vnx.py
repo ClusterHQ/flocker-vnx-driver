@@ -41,7 +41,7 @@ def get_iqn():
 
 
 @implementer(IBlockDeviceAPI)
-class EMCVNXBlockAPI(object):
+class EMCVNXBlockDeviceAPI(object):
 
     VERSION = '0.1'
     driver_name = 'VNX'
