@@ -1,4 +1,4 @@
-user: "ClusterHQ"
-password: "ClusterHQ"
-ip: "10.10.166.9" # SPA
-pool: "flocker"
+USER: "ClusterHQ"
+PASSWORD: "ClusterHQ"
+IP: "10.10.166.9" # SPA
+POOL: "flocker"
