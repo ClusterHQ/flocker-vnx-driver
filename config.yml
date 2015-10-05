@@ -1,4 +1,5 @@
 USER: "ClusterHQ"
 PASSWORD: "ClusterHQ"
 IP: "10.10.166.9" # SPA
-POOL: "flocker"
+POOL: "ClusterHQ-Test3"
+STORAGE_GROUP: "SG_sclf200.lss.emc.com"

@@ -34,8 +34,9 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
     user = config['USER']
     password = config['PASSWORD']
     ip = config['IP']
-    pool = config['POOL']
-    return EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool)
+    pool = config['STORAGE_POOL']
+    group = config['STORAGE_GROUP']
+    return EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool, group)
 
 
 # We could remove this, all tests are covered

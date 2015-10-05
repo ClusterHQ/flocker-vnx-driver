@@ -51,6 +51,7 @@ class EMCVnxBlockDeviceAPI(object):
         self._cluster_id = cluster_id
         self._pool = pool
         self._hostname = socket.gethostname()
+        self._group = group
         self._setup()
 
     def _setup(self):
@@ -214,13 +215,3 @@ class EMCVnxBlockDeviceAPI(object):
                 continue
             target_portals.append(portal)
         return target_portals
-
-
-if __name__ == '__main__':
-    api = EMCVNXBlockAPI(None, 'sysadmin', 'sysadmin', '192.168.1.94', 'Pool_1')
-    import pdb;pdb.set_trace()
-    #volume = api.attach_volume('flocker-test-02', api._hostname)
-    
-    #api.get_device_path('flocker-test-02')
-    vols = api.list_volumes()
-    print vols
