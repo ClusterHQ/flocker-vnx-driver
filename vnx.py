@@ -93,7 +93,7 @@ class EMCVnxBlockDeviceAPI(object):
 
     def destroy_volume(self, blockdevice_id):
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
-        self.destroy_volume(lun_name)
+        self._client.destroy_volume(lun_name)
 
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(info=u'Entering EMC VNX attach_volume',
