@@ -22,6 +22,7 @@ import socket
 
 from emc_vnx_client import EMCVNXClient
 
+LUN_NAME_PREFIX = 'flocker-'
 
 _logger = Logger()
 
@@ -67,12 +68,23 @@ class EMCVnxBlockDeviceAPI(object):
         """
         return size/(1024*1024*1024)
 
+    def _get_lun_name_from_blockdevice_id(self, blockdevice_id):
+        """
+        """
+        return LUN_NAME_PREFIX + str(blockdevice_id)
+
+    def _get_blockdevice_id_from_lun_name(self, lun_name):
+        """
+        """
+        return lun_name.split(LUN_NAME_PREFIX, 1)[1]
+
     def create_volume(self, dataset_id, size):
         Message.new(info=u'Entering EMC VNX create_volume').write(_logger)
         volume = _blockdevicevolume_from_dataset_id(
             size=size, dataset_id=dataset_id)
+        lun_name = self._get_lun_name_from_blockdevice_id(volume.blockdevice_id)
         rc, out = self._client.create_volume(
-            str(volume.blockdevice_id),
+            lun_name,
             str(self._convert_volume_size(size)),
             self._pool)
         if rc != 0 and out.find('Unable to create the LUN because the specified name is already in use') == -1: 
@@ -82,7 +94,8 @@ class EMCVnxBlockDeviceAPI(object):
     def destroy_volume(self, blockdevice_id):
         Message.new(info=u'Entering EMC VNX destroy_volume',
                     blockdevice_id=blockdevice_id).write(_logger)
-        self.destroy_volume(str(blockdevice_id))
+        lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
+        self.destroy_volume(lun_name)
 
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(info=u'Entering EMC VNX attach_volume',
@@ -101,10 +114,6 @@ class EMCVnxBlockDeviceAPI(object):
         )
         return volume
         
-    def resize_volume(self, blockdevice_id, size):
-        Message.new(info=u'Entering EMC VNX resize_volume',
-                    blockdevice_id=blockdevice_id).write(_logger)
-
     def detach_volume(self, blockdevice_id):
         Message.new(info=u'Entering EMC VNX detach_volume',
                     blockdevice_id=blockdevice_id).write(_logger)
@@ -126,7 +135,7 @@ class EMCVnxBlockDeviceAPI(object):
         volumes.append(fake_vol)
 
         # get lun_map of this node
-        rc, out = self._client.get_storage_group(self._hostname)
+        rc, out = self._client.get_storage_group(self._group)
         if rc != 0:
              raise Exception('SG does not exist')
         lun_map = self._client.parse_sg_content(out)['lunmap']
@@ -134,12 +143,14 @@ class EMCVnxBlockDeviceAPI(object):
         # add luns which belong to flocker
         luns = self._client.get_all_luns()
         for each in luns:
-            if each['lun_name'].startswith('block-'):
+            if each['lun_name'].startswith(LUN_NAME_PREFIX):
                 attached_to = None
                 if lun_map.has_key(each['lun_id']):
                     attached_to = unicode(self._hostname)
+                lun_name = each['lun_name']
+                blockdevice_id = self._get_blockdevice_id_from_lun_name(lun_name)
                 vol = _blockdevicevolume_from_blockdevice_id(
-                    blockdevice_id=unicode(each['lun_name']),
+                    blockdevice_id=blockdevice_id,
                     size=int(1024*1024*1024*each['total_capacity_gb']),
                     attached_to=attached_to)
                 volumes.append(vol)
