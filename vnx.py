@@ -76,7 +76,7 @@ class EMCVnxBlockDeviceAPI(object):
     def _get_blockdevice_id_from_lun_name(self, lun_name):
         """
         """
-        return lun_name.split(LUN_NAME_PREFIX, 1)[1]
+        return unicode(lun_name.split(LUN_NAME_PREFIX, 1)[1])
 
     def create_volume(self, dataset_id, size):
         Message.new(info=u'Entering EMC VNX create_volume').write(_logger)
