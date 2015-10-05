@@ -92,8 +92,6 @@ class EMCVnxBlockDeviceAPI(object):
         return volume
 
     def destroy_volume(self, blockdevice_id):
-        Message.new(info=u'Entering EMC VNX destroy_volume',
-                    blockdevice_id=blockdevice_id).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         self.destroy_volume(lun_name)
 
