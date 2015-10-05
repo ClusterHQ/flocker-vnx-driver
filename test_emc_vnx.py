@@ -71,8 +71,8 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
         # 'test_resize_unknown_volume',
         # 'test_resize_volume_listed',
         # 'test_resize_destroyed_volume',
-        # 'test_compute_instance_id_nonempty',
-        # 'test_compute_instance_id_unicode'
+        'test_compute_instance_id_nonempty',
+        'test_compute_instance_id_unicode'
     ]
 )
 class EMCVnxBlockDeviceAPIInterfaceTests(
