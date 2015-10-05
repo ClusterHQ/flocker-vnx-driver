@@ -50,7 +50,7 @@ class EMCVnxBlockDeviceAPI(object):
         self._client = EMCVNXClient(user, password, ip)
         self._cluster_id = cluster_id
         self._pool = pool
-        self._hostname = socket.gethostname()
+        self._hostname = unicode(socket.gethostname())
         self._group = group
         self._setup()
 
