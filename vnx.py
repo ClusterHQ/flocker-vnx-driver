@@ -71,12 +71,12 @@ class EMCVnxBlockDeviceAPI(object):
     def _get_lun_name_from_blockdevice_id(self, blockdevice_id):
         """
         """
-        return LUN_NAME_PREFIX + str(self._cluster_id) + str(blockdevice_id)
+        return LUN_NAME_PREFIX + str(blockdevice_id)
 
     def _get_blockdevice_id_from_lun_name(self, lun_name):
         """
         """
-        return unicode(lun_name.split(LUN_NAME_PREFIX + str(self._cluster_id), 1)[1])
+        return unicode(lun_name.split(LUN_NAME_PREFIX), 1)[1])
 
     def create_volume(self, dataset_id, size):
         Message.new(info=u'Entering EMC VNX create_volume').write(_logger)
@@ -136,7 +136,7 @@ class EMCVnxBlockDeviceAPI(object):
         # add luns which belong to flocker
         luns = self._client.get_all_luns()
         for each in luns:
-            if each['lun_name'].startswith(LUN_NAME_PREFIX + str(self._cluster_id)):
+            if each['lun_name'].startswith(LUN_NAME_PREFIX):
                 attached_to = None
                 if lun_map.has_key(each['lun_id']):
                     attached_to = unicode(self._hostname)
