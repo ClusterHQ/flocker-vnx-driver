@@ -99,12 +99,11 @@ class EMCVnxBlockDeviceAPI(object):
         Message.new(info=u'Entering EMC VNX attach_volume',
                     blockdevice_id=blockdevice_id,
                     attach_to=attach_to).write(_logger)
-        self._client.create_storage_group(str(attach_to))
-        self._client.connect_host_to_sg(str(attach_to), str(attach_to))
-        lun = self._client.get_lun_by_name(blockdevice_id)
+        lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
+        lun = self._client.get_lun_by_name(lun_name)
         alu = lun['lun_id']
-        hlu = self.choose_hlu(str(attach_to))
-        self._client.add_volume_to_sg(str(hlu), str(alu), str(attach_to))
+        hlu = self.choose_hlu(self._group)
+        self._client.add_volume_to_sg(str(hlu), str(alu), self._group)
         volume = _blockdevicevolume_from_blockdevice_id(
             blockdevice_id=blockdevice_id,
             size=int(lun['total_capacity_gb']*1024*1024*1024),
@@ -115,22 +114,18 @@ class EMCVnxBlockDeviceAPI(object):
     def detach_volume(self, blockdevice_id):
         Message.new(info=u'Entering EMC VNX detach_volume',
                     blockdevice_id=blockdevice_id).write(_logger)
-        alu = self._client.get_lun_by_name(blockdevice_id)['lun_id'] 
-        rc, out = self._client.get_storage_group(self._hostname)
+        lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
+        alu = self._client.get_lun_by_name(lun_name)['lun_id'] 
+        rc, out = self._client.get_storage_group(self._group)
         if rc != 0:
              raise Exception('SG does not exist')
         hlu = self._client.parse_sg_content(out)['lunmap'][alu]
-        self._client.remove_volume_from_sg(str(hlu), self._hostname)
+        self._client.remove_volume_from_sg(str(hlu), self._group)
         rescan_iscsi(hlu)
 
     def list_volumes(self):
         Message.new(info=u'Entering EMC VNX list_volumes').write(_logger)
-        fake_vol = _blockdevicevolume_from_blockdevice_id(
-            blockdevice_id=u'block-886ed03a-5606-453a-94a9-a1cbaf35164c',
-            size=1024*1024*1024,
-            attached_to=u'f_host')
         volumes = []
-        volumes.append(fake_vol)
 
         # get lun_map of this node
         rc, out = self._client.get_storage_group(self._group)
@@ -157,14 +152,15 @@ class EMCVnxBlockDeviceAPI(object):
     def get_device_path(self, blockdevice_id):
         Message.new(info=u'Entering EMC VNX get_device_path',
                     blockdevice_id=blockdevice_id).write(_logger)
-        lun = self._client.get_lun_by_name(blockdevice_id)
-        rc, out = self._client.get_storage_group(self._hostname)
+        lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
+        lun = self._client.get_lun_by_name(lun_name)
+        rc, out = self._client.get_storage_group(self._group)
         if rc != 0:
              raise Exception('SG does not exist')
         lun_map = self._client.parse_sg_content(out)['lunmap']
         hlu = lun_map[lun['lun_id']]
         portals = self.get_iscsi_target_portals(get_iqn(),
-                                                self._hostname)
+                                                self._group)
         device_name = "ip-%s:3260-iscsi-%s-lun-%s" % (portals[0]['IP Address'],
                                                       portals[0]['Port WWN'],
                                                       str(hlu))
