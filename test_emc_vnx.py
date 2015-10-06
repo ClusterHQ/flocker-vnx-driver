@@ -18,7 +18,7 @@ from flocker.testtools import skip_except
 from vnx import EMCVnxBlockDeviceAPI
 
 from flocker.node.agents.test.test_blockdevice import (
-    make_iblockdeviceapi_tests
+    make_iblockdeviceapi_tests, detach_destroy_volumes
 )
 
 
@@ -36,7 +36,9 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
     ip = config['IP']
     pool = config['STORAGE_POOL']
     group = config['STORAGE_GROUP']
-    return EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool, group)
+    api = EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool, group)
+    test_case.addCleanup(detach_destroy_volumes, api)
+    return api
 
 
 # We could remove this, all tests are covered
