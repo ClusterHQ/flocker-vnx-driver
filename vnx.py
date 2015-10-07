@@ -31,10 +31,7 @@ def vnx_api(cluster_id, user, password, ip, pool):
     return EMCVNXBlockDeviceAPI(cluster_id, user, password, ip, pool)
 
 def rescan_iscsi(number=None):
-    cmd = ["rescan-scsi-bus", "-r", "-c"]
-    if number:
-       cmd.append(str(number))
-    check_output(["rescan-scsi-bus", "-r", "-c"])
+    check_output(["rescan-scsi-bus", "-r", "-c", "2"])
 
 def get_iqn():
     out = check_output(["cat", "/etc/iscsi/initiatorname.iscsi"])
