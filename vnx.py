@@ -96,7 +96,7 @@ class EMCVnxBlockDeviceAPI(object):
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         self._client.destroy_volume(lun_name)
 
-    def _get_device_list(self)
+    def _get_device_list(self):
         """
         """
         cmd = ('lsscsi')
