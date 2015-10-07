@@ -103,11 +103,9 @@ class EMCVnxBlockDeviceAPI(object):
         output = check_output([b"lsscsi"])
         device_names = []
         for line in output.splitlines():
-            parts = line.split(u":", 2)
-            device_file, attributes, backing_file = parts
-            device_file = FilePath(device_file.strip().encode("utf-8"))
+            device_file = line.split()[5]
             device_names.append(device_file)
-            import pdb; pdb.set_trace()
+        return device_names
 
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(info=u'Entering EMC VNX attach_volume',
@@ -131,6 +129,7 @@ class EMCVnxBlockDeviceAPI(object):
         rescan_iscsi(hlu)
 
         device_list_after_attach = self._get_device_list()
+        import pdb; pdb.set_trace()
         return volume
         
     def detach_volume(self, blockdevice_id):
