@@ -83,6 +83,7 @@ class EMCVnxBlockDeviceAPI(object):
         volume = _blockdevicevolume_from_dataset_id(
             size=size, dataset_id=dataset_id)
         lun_name = self._get_lun_name_from_blockdevice_id(volume.blockdevice_id)
+        out = os.system("lsscsi")
         rc, out = self._client.create_volume(
             lun_name,
             str(self._convert_volume_size(size)),
@@ -95,6 +96,19 @@ class EMCVnxBlockDeviceAPI(object):
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         self._client.destroy_volume(lun_name)
 
+    def _get_device_list(self)
+        """
+        """
+        cmd = ('lsscsi')
+        output = check_output([b"lsscsi"])
+        device_names = []
+        for line in output.splitlines():
+            parts = line.split(u":", 2)
+            device_file, attributes, backing_file = parts
+            device_file = FilePath(device_file.strip().encode("utf-8"))
+            device_names.append(device_file)
+            import pdb; pdb.set_trace()
+
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(info=u'Entering EMC VNX attach_volume',
                     blockdevice_id=blockdevice_id,
@@ -103,12 +117,20 @@ class EMCVnxBlockDeviceAPI(object):
         lun = self._client.get_lun_by_name(lun_name)
         alu = lun['lun_id']
         hlu = self.choose_hlu(self._group)
+
+        # Get list of devices before adding volume to storage group
+        device_list_before_attach = self._get_device_list()
+
         self._client.add_volume_to_sg(str(hlu), str(alu), self._group)
         volume = _blockdevicevolume_from_blockdevice_id(
             blockdevice_id=blockdevice_id,
             size=int(lun['total_capacity_gb']*1024*1024*1024),
             attached_to=unicode(attach_to)
         )
+        # Rescan scsi bus to discover new volume
+        rescan_iscsi(hlu)
+
+        device_list_after_attach = self._get_device_list()
         return volume
         
     def detach_volume(self, blockdevice_id):
