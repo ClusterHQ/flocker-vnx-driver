@@ -120,7 +120,8 @@ class EMCVnxBlockDeviceAPI(object):
         # Get list of devices before adding volume to storage group
         device_list_before_attach = self._get_device_list()
 
-        self._client.add_volume_to_sg(str(hlu), str(alu), self._group)
+        rc, out = self._client.add_volume_to_sg(str(hlu), str(alu), self._group)
+        import pdb; pdb.set_trace()
         volume = _blockdevicevolume_from_blockdevice_id(
             blockdevice_id=blockdevice_id,
             size=int(lun['total_capacity_gb']*1024*1024*1024),
