@@ -137,6 +137,8 @@ class EMCVnxBlockDeviceAPI(object):
                     blockdevice_id=blockdevice_id).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         alu = self._client.get_lun_by_name(lun_name)['lun_id'] 
+        if lun == {}:
+            raise UnknownVolume(blockdevice_id)
         rc, out = self._client.get_storage_group(self._group)
         if rc != 0:
              raise Exception('SG does not exist')
