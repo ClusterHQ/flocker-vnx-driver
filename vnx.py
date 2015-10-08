@@ -136,10 +136,10 @@ class EMCVnxBlockDeviceAPI(object):
         Message.new(info=u'Entering EMC VNX detach_volume',
                     blockdevice_id=blockdevice_id).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
-        lun_data = self._client.get_lun_by_name(lun_name) 
+        lun = self._client.get_lun_by_name(lun_name) 
         if lun == {}:
             raise UnknownVolume(blockdevice_id)
-        alu = lun_data['lun_id'] 
+        alu = lun['lun_id'] 
         rc, out = self._client.get_storage_group(self._group)
         if rc != 0:
              raise Exception('SG does not exist')
