@@ -142,8 +142,13 @@ class EMCVnxBlockDeviceAPI(object):
         alu = lun['lun_id'] 
         rc, out = self._client.get_storage_group(self._group)
         if rc != 0:
-             raise Exception('SG does not exist')
-        hlu = self._client.parse_sg_content(out)['lunmap'][alu]
+            raise Exception('SG does not exist')
+
+        try:
+            hlu = self._client.parse_sg_content(out)['lunmap'][alu]
+        except KeyError:
+            raise UnattachedVolume(blockdevice_id)
+
         self._client.remove_volume_from_sg(str(hlu), self._group)
         rescan_iscsi(hlu)
 
