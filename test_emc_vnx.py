@@ -49,7 +49,7 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
         # 'test_list_volume_empty',
         # 'test_listed_volume_attributes',
         # 'test_created_volume_attributes',
-        # 'test_destroy_unknown_volume',
+        'test_destroy_unknown_volume',
         'test_destroy_volume',
         # 'test_destroy_destroyed_volume',
         # 'test_attach_unknown_volume',
