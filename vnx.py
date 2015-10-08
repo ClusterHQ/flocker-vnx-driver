@@ -91,7 +91,9 @@ class EMCVnxBlockDeviceAPI(object):
 
     def destroy_volume(self, blockdevice_id):
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
-        self._client.destroy_volume(lun_name)
+        rc, out = self._client.destroy_volume(lun_name)
+        if rc == 9:
+            raise UnknownVolume(out)
 
     def _get_device_list(self):
         """

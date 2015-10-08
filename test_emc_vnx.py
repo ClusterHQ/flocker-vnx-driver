@@ -67,7 +67,7 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
         # 'test_attach_destroyed_volume',
         # 'test_get_device_path_unknown_volume',
         # 'test_get_device_path_unattached_volume',
-        'test_get_device_path_device',
+        # 'test_get_device_path_device',
         # 'test_get_device_path_device_repeatable_results',
         # 'test_device_size',
         # 'test_resize_unknown_volume',
