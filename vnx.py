@@ -93,7 +93,7 @@ class EMCVnxBlockDeviceAPI(object):
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         rc, out = self._client.destroy_volume(lun_name)
         if rc == 9:
-            raise UnknownVolume(out)
+            raise UnknownVolume(blockdevice_id)
 
     def _get_device_list(self):
         """
@@ -128,7 +128,6 @@ class EMCVnxBlockDeviceAPI(object):
         rescan_iscsi(hlu)
 
         device_list_after_attach = self._get_device_list()
-        import pdb; pdb.set_trace()
         return volume
         
     def detach_volume(self, blockdevice_id):
