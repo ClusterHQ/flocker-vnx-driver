@@ -46,7 +46,7 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
     supported_tests=[
         'test_interface',
         'test_created_is_listed',
-        # 'test_list_volume_empty',
+        'test_list_volume_empty',
         'test_listed_volume_attributes',
         'test_created_volume_attributes',
         'test_destroy_unknown_volume',
