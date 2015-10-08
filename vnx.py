@@ -112,6 +112,8 @@ class EMCVnxBlockDeviceAPI(object):
                     attach_to=attach_to).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         lun = self._client.get_lun_by_name(lun_name)
+        if lun == {}:
+            raise UnknownVolume(blockdevice_id)
         alu = lun['lun_id']
         hlu = self.choose_hlu(self._group)
 
