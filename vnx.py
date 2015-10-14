@@ -105,7 +105,7 @@ class EMCVnxBlockDeviceAPI(object):
         for line in output.splitlines():
             device_file = line.split()[5]
             device_names.append(device_file)
-        return device_names
+        return set(device_names)
 
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(info=u'Entering EMC VNX attach_volume',
@@ -120,7 +120,7 @@ class EMCVnxBlockDeviceAPI(object):
 
         # Get list of devices before adding volume to storage group
         rescan_iscsi(hlu)
-        device_list_before_attach = self._get_device_list()
+        devices_before_attach = self._get_device_list()
 
         rc, out = self._client.add_volume_to_sg(str(hlu), str(alu), self._group)
         if rc == 66:
@@ -133,7 +133,8 @@ class EMCVnxBlockDeviceAPI(object):
         )
         # Rescan scsi bus to discover new volume
         rescan_iscsi(hlu)
-        device_list_after_attach = self._get_device_list()
+        devices_after_attach = self._get_device_list()
+        new_device = list(devices_after_attach - devices_before_attach)[0]
         import pdb; pdb.set_trace()
         return volume
         
