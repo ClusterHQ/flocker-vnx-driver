@@ -52,6 +52,7 @@ class EMCVnxBlockDeviceAPI(object):
         self._group = group
         self._setup()
         self._client.connect_host_to_sg(self._hostname, self._group)
+        self._device_path_map = pmap()
 
     def _setup(self):
         #print('New EMC VNX flocker driver setup')
@@ -136,6 +137,7 @@ class EMCVnxBlockDeviceAPI(object):
         devices_after_attach = self._get_device_list()
         new_device = list(devices_after_attach - devices_before_attach)[0]
         import pdb; pdb.set_trace()
+        self._device_path_map.set(blockdevice_id, FilePath(new_device))
         return volume
         
     def detach_volume(self, blockdevice_id):
@@ -191,9 +193,6 @@ class EMCVnxBlockDeviceAPI(object):
         lun = self._client.get_lun_by_name(lun_name)
         if lun == {}:
             raise UnknownVolume(blockdevice_id)
-        rc, out = self._client.get_storage_group(self._group)
-        if rc != 0:
-             raise Exception('SG does not exist')
         lun_map = self._client.parse_sg_content(out)['lunmap']
         hlu = lun_map[lun['lun_id']]
         portals = self.get_iscsi_target_portals(get_iqn(),
