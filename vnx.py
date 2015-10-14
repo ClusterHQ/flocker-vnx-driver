@@ -42,7 +42,6 @@ class EMCVnxBlockDeviceAPI(object):
         self._pool = pool
         self._hostname = unicode(socket.gethostname())
         self._group = group
-        self._setup()
         self._client.connect_host_to_sg(self._hostname, self._group)
         self._device_path_map = pmap()
 
