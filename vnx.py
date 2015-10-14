@@ -138,7 +138,7 @@ class EMCVnxBlockDeviceAPI(object):
         devices_after_attach = self._get_device_list()
         new_device = list(devices_after_attach - devices_before_attach)[0]
         import pdb; pdb.set_trace()
-        self._device_path_map.set(blockdevice_id, FilePath(new_device))
+        self._device_path_map = self._device_path_map.set(blockdevice_id, FilePath(new_device))
         return volume
         
     def detach_volume(self, blockdevice_id):
