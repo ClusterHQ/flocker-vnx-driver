@@ -119,6 +119,7 @@ class EMCVnxBlockDeviceAPI(object):
         hlu = self.choose_hlu(self._group)
 
         # Get list of devices before adding volume to storage group
+        rescan_iscsi(hlu)
         device_list_before_attach = self._get_device_list()
 
         rc, out = self._client.add_volume_to_sg(str(hlu), str(alu), self._group)
@@ -132,8 +133,8 @@ class EMCVnxBlockDeviceAPI(object):
         )
         # Rescan scsi bus to discover new volume
         rescan_iscsi(hlu)
-
         device_list_after_attach = self._get_device_list()
+        import pdb; pdb.set_trace()
         return volume
         
     def detach_volume(self, blockdevice_id):
