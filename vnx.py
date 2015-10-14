@@ -51,6 +51,7 @@ class EMCVnxBlockDeviceAPI(object):
         self._hostname = unicode(socket.gethostname())
         self._group = group
         self._setup()
+        self._client.connect_host_to_sg(self._hostname, self._group)
 
     def _setup(self):
         #print('New EMC VNX flocker driver setup')
