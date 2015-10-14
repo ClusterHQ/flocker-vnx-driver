@@ -7,6 +7,7 @@ from flocker.node.agents.blockdevice import (
 )
 
 from eliot import Message, Logger
+from pyrsistent import pmap
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 from subprocess import check_output
