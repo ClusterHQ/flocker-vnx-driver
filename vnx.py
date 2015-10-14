@@ -182,7 +182,7 @@ class EMCVnxBlockDeviceAPI(object):
         lun = self._client.get_lun_by_name(lun_name)
         if lun == {}:
             raise UnknownVolume(blockdevice_id)
-        device_path = self._device_path_map(blockdevice_id)
+        device_path = self._device_path_map.get(blockdevice_id)
         if device_path is None:
             raise UnattachedVolume(blockdevice_id)
         return device_path
