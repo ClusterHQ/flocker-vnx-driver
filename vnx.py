@@ -22,14 +22,6 @@ LUN_NAME_PREFIX = 'flocker-'
 _logger = Logger()
 
 
-def vnx_api(cluster_id, user, password, ip, pool):
-    return EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool)
-
-
-def rescan_iscsi(number=None):
-    check_output(["rescan-scsi-bus", "-r", "-c", "2"])
-
-
 @implementer(IBlockDeviceAPI)
 class EMCVnxBlockDeviceAPI(object):
 
@@ -44,6 +36,9 @@ class EMCVnxBlockDeviceAPI(object):
         self._group = group
         self._client.connect_host_to_sg(self._hostname, self._group)
         self._device_path_map = pmap()
+
+    def _rescan_iscsi(number=None):
+        check_output(["rescan-scsi-bus", "-r", "-c", "2"])
 
     def _convert_volume_size(self, size):
         """
@@ -105,7 +100,7 @@ class EMCVnxBlockDeviceAPI(object):
         hlu = self.choose_hlu(self._group)
 
         # Get list of devices before adding volume to storage group
-        rescan_iscsi(hlu)
+        self._rescan_iscsi(hlu)
         devices_before_attach = self._get_device_list()
 
         rc, out = self._client.add_volume_to_sg(str(hlu),
@@ -120,7 +115,7 @@ class EMCVnxBlockDeviceAPI(object):
             attached_to=unicode(attach_to)
         )
         # Rescan scsi bus to discover new volume
-        rescan_iscsi(hlu)
+        self._rescan_iscsi(hlu)
         devices_after_attach = self._get_device_list()
         new_device = list(devices_after_attach - devices_before_attach)[0]
         self._device_path_map = self._device_path_map.set(blockdevice_id,
@@ -145,7 +140,7 @@ class EMCVnxBlockDeviceAPI(object):
             raise UnattachedVolume(blockdevice_id)
 
         self._client.remove_volume_from_sg(str(hlu), self._group)
-        rescan_iscsi(hlu)
+        self._rescan_iscsi(hlu)
         self._device_path_map = self._device_path_map.remove(blockdevice_id)
 
     def list_volumes(self):
