@@ -33,7 +33,8 @@ class EMCVnxBlockDeviceAPI(object):
         self._cluster_id = cluster_id
         self._pool = pool
         self._hostname = unicode(socket.gethostname())
-        self._group = group
+        self._group = u'Flocker' + self._hostname
+        self._client.create_storage_group(self._group)
         self._client.connect_host_to_sg(self._hostname, self._group)
         self._device_path_map = pmap()
 
