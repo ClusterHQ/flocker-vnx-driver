@@ -38,7 +38,7 @@ class EMCVnxBlockDeviceAPI(object):
         self._client.connect_host_to_sg(self._hostname, self._group)
         self._device_path_map = pmap()
 
-    def _rescan_iscsi(number=None):
+    def _rescan_iscsi(self, number=None):
         check_output(["rescan-scsi-bus", "-r", "-c", "2"])
 
     def _convert_volume_size(self, size):
