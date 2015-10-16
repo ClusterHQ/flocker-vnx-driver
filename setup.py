@@ -38,5 +38,5 @@ setup(
     # https://github.com/openstack/cinder/blob/master/cinder/volume/drivers/emc/emc_vnx_cli.py
     install_requires=[''],
     data_files=[('/etc/flocker/', ['example_vnx_agent.yml']),
-                ('/etc/flocker/', ['vnx_test.config'])]
+                ('/etc/flocker/', ['config.yml'])]
 )
