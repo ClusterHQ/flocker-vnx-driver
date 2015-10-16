@@ -3,8 +3,8 @@ control-service:
   hostname: "control-service"
 dataset:
   backend: "vnx_flocker_driver"
-  username: "admin"
-  password: "Vnx123"
-  mdm: "192.168.100.1"
-  protection_domain: "pdomain"
-  ssl: True
+  USER: "ClusterHQ"
+  PASSWORD: "ClusterHQ"
+  IP: "10.10.166.9" # SPA
+  STORAGE_POOL: "ClusterHQ-Test3"
+  STORAGE_GROUP: "SG_sclf200.lss.emc.com"
