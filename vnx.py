@@ -22,13 +22,17 @@ LUN_NAME_PREFIX = 'flocker-'
 _logger = Logger()
 
 
+def vnx_from_configuration(cluster_id, user, password, ip, pool):
+    return EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool)
+
+
 @implementer(IBlockDeviceAPI)
 class EMCVnxBlockDeviceAPI(object):
 
     VERSION = '0.1'
     driver_name = 'VNX'
 
-    def __init__(self, cluster_id, user, password, ip, pool, group):
+    def __init__(self, cluster_id, user, password, ip, pool):
         self._client = EMCVNXClient(user, password, ip)
         self._cluster_id = cluster_id
         self._pool = pool

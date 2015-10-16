@@ -35,8 +35,7 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
     password = config['PASSWORD']
     ip = config['IP']
     pool = config['STORAGE_POOL']
-    group = config['STORAGE_GROUP']
-    api = EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool, group)
+    api = EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool)
     test_case.addCleanup(detach_destroy_volumes, api)
     return api
 
