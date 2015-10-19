@@ -1,7 +1,7 @@
 # flocker-vnx-driver
 EMC VNX driver for Flocker.
 
-This driver is tested on Ubuntu 14.04 and CoreOS.
+This driver is tested on Ubuntu 14.04.
 
 ## Prereqs
 
