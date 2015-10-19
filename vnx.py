@@ -62,7 +62,9 @@ class EMCVnxBlockDeviceAPI(object):
         return unicode(lun_name.split(LUN_NAME_PREFIX, 1)[1])
 
     def create_volume(self, dataset_id, size):
-        Message.new(info=u'Entering EMC VNX create_volume').write(_logger)
+        Message.new(operation=u'create_volume',
+                    dataset_id=dataset_id,
+                    size=size).write(_logger)
         volume = _blockdevicevolume_from_dataset_id(
             size=size, dataset_id=dataset_id)
         lun_name = self._get_lun_name_from_blockdevice_id(
@@ -72,14 +74,27 @@ class EMCVnxBlockDeviceAPI(object):
             lun_name,
             str(self._convert_volume_size(size)),
             self._pool)
+        Message.new(operation=u'create_volume_output',
+                    dataset_id=dataset_id,
+                    size=size,
+                    lun_name=lun_name,
+                    rc=rc,
+                    out=out).write(_logger)
         if rc != 0 and out.find('Unable to create the LUN \
                 because the specified name is already in use') == -1:
             raise Exception(out)
         return volume
 
     def destroy_volume(self, blockdevice_id):
+        Message.new(operation=u'destroy_volume',
+                    blockdevice_id=blockdevice_id).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         rc, out = self._client.destroy_volume(lun_name)
+        Message.new(operation=u'destroy_volume_output',
+                    blockdevice_id=blockdevice_id,
+                    lun_name=lun_name,
+                    rc=rc,
+                    out=out).write(_logger)
         if rc == 9:
             raise UnknownVolume(blockdevice_id)
 
@@ -88,13 +103,15 @@ class EMCVnxBlockDeviceAPI(object):
         """
         output = check_output([b"lsscsi"])
         device_names = []
+        Message.new(operation=u'lsscsi',
+                    output=output).write(_logger)
         for line in output.splitlines():
             device_file = line.split()[5]
             device_names.append(device_file)
         return set(device_names)
 
     def attach_volume(self, blockdevice_id, attach_to):
-        Message.new(info=u'Entering EMC VNX attach_volume',
+        Message.new(operation=u'attach_volume',
                     blockdevice_id=blockdevice_id,
                     attach_to=attach_to).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
