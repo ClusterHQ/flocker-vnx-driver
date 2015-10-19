@@ -183,7 +183,6 @@ class EMCVnxBlockDeviceAPI(object):
                     device_path_map=self._device_path_map).write()
 
     def list_volumes(self):
-        Message.new(info=u'Entering EMC VNX list_volumes').write(_logger)
         volumes = []
 
         # get lun_map of this node
@@ -202,13 +201,16 @@ class EMCVnxBlockDeviceAPI(object):
                 lun_name = each['lun_name']
                 blockdevice_id = self._get_blockdevice_id_from_lun_name(
                     lun_name)
+                size = int(1024*1024*1024*each['total_capacity_gb'])
                 vol = _blockdevicevolume_from_blockdevice_id(
                     blockdevice_id=blockdevice_id,
-                    size=int(1024*1024*1024*each['total_capacity_gb']),
+                    size=size,
                     attached_to=attached_to)
+                Message.new(operation=u'list_volumes_output',
+                            blockdevice_id=blockdevice_id,
+                            size=size,
+                            attached_to=attached_to).write()
                 volumes.append(vol)
-        Message.new(operation=u'list_volumes_output',
-                    volumes=volumes).write()
         return volumes
 
     def get_device_path(self, blockdevice_id):
