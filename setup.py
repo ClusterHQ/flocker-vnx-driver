@@ -34,8 +34,7 @@ setup(
 
     keywords='backend, plugin, flocker, docker, python',
     packages=find_packages(exclude=['test*']),
-    # TODO: Install emc_vnx_cli:
-    # https://github.com/openstack/cinder/blob/master/cinder/volume/drivers/emc/emc_vnx_cli.py
+    dependency_links=['https://github.com/emc-openstack/naviseccli/blob/master/navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb'],
     install_requires=[''],
     data_files=[('/etc/flocker/', ['example_vnx_agent.yml']),
                 ('/etc/flocker/', ['config.yml'])]
