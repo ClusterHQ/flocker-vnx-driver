@@ -63,7 +63,7 @@ class EMCVnxBlockDeviceAPI(object):
 
     def create_volume(self, dataset_id, size):
         Message.new(operation=u'create_volume',
-                    dataset_id=dataset_id,
+                    dataset_id=str(dataset_id),
                     size=size).write(_logger)
         volume = _blockdevicevolume_from_dataset_id(
             size=size, dataset_id=dataset_id)
@@ -75,7 +75,7 @@ class EMCVnxBlockDeviceAPI(object):
             str(self._convert_volume_size(size)),
             self._pool)
         Message.new(operation=u'create_volume_output',
-                    dataset_id=dataset_id,
+                    dataset_id=str(dataset_id),
                     size=size,
                     lun_name=lun_name,
                     rc=rc,
@@ -142,10 +142,19 @@ class EMCVnxBlockDeviceAPI(object):
         new_device = list(devices_after_attach - devices_before_attach)[0]
         self._device_path_map = self._device_path_map.set(blockdevice_id,
                                                           FilePath(new_device))
+        Message.new(operation=u'attach_volume_output',
+                    blockdevice_id=blockdevice_id,
+                    attach_to=attach_to,
+                    lun_name=lun_name,
+                    alu=alu,
+                    hlu=hlu,
+                    devices_before_attach=devices_before_attach,
+                    devices_after_attach=devices_after_attach,
+                    device_path_map=self._device_path_map).write()
         return volume
 
     def detach_volume(self, blockdevice_id):
-        Message.new(info=u'Entering EMC VNX detach_volume',
+        Message.new(operation=u'detach_volume',
                     blockdevice_id=blockdevice_id).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         lun = self._client.get_lun_by_name(lun_name)
@@ -164,6 +173,14 @@ class EMCVnxBlockDeviceAPI(object):
         self._client.remove_volume_from_sg(str(hlu), self._group)
         self._rescan_iscsi(hlu)
         self._device_path_map = self._device_path_map.remove(blockdevice_id)
+        Message.new(operation=u'detach_volume_output',
+                    blockdevice_id=blockdevice_id,
+                    lun_name=lun_name,
+                    alu=alu,
+                    hlu=hlu,
+                    rc=rc,
+                    out=out,
+                    device_path_map=self._device_path_map).write()
 
     def list_volumes(self):
         Message.new(info=u'Entering EMC VNX list_volumes').write(_logger)
@@ -190,10 +207,12 @@ class EMCVnxBlockDeviceAPI(object):
                     size=int(1024*1024*1024*each['total_capacity_gb']),
                     attached_to=attached_to)
                 volumes.append(vol)
+        Message.new(operation=u'list_volumes_output',
+                    volumes=volumes).write()
         return volumes
 
     def get_device_path(self, blockdevice_id):
-        Message.new(info=u'Entering EMC VNX get_device_path',
+        Message.new(operation=u'get_device_path',
                     blockdevice_id=blockdevice_id).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         lun = self._client.get_lun_by_name(lun_name)
@@ -202,15 +221,20 @@ class EMCVnxBlockDeviceAPI(object):
         device_path = self._device_path_map.get(blockdevice_id)
         if device_path is None:
             raise UnattachedVolume(blockdevice_id)
+        Message.new(operation=u'get_device_path_output',
+                    blockdevice_id=blockdevice_id,
+                    device_path=device_path.path).write()
         return device_path
 
     def allocation_unit(self):
-        Message.new(info=u'Entering EMC VNX allocation_unit').write(_logger)
-        return 1
+        allocation_unit = 1
+        Message.new(operation=u'allocation_unit',
+                    allocation_unit=allocation_unit).write(_logger)
+        return allocation_unit
 
     def compute_instance_id(self):
-        Message.new(info=u'Entering EMC VNX compute_instance_id',
-                    hostanme=self._hostname).write(_logger)
+        Message.new(operation=u'compute_instance_id',
+                    hostname=self._hostname).write()
         return self._hostname
 
     def choose_hlu(self, sg_name):
