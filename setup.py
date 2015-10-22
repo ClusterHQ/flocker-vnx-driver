@@ -9,7 +9,7 @@ with codecs.open('DESCRIPTION.rst', encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='emc_vnx_flocker_plugin',
+    name='vnx_flocker_driver',
     version='1.0',
     description='EMC VNX Backend Plugin for ClusterHQ/Flocker ',
     long_description=long_description,
