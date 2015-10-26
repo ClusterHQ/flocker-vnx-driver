@@ -47,12 +47,6 @@ RUN bash /tmp/wrap_command.sh /sbin losetup 755
 RUN bash /tmp/wrap_command.sh /sbin mkfs 755
 RUN bash /tmp/wrap_command.sh /sbin blkid 755
 
-DD wrap_dataset_agent_mtab.sh /opt/flocker/wrap_dataset_agent_mtab.sh
-RUN chmod +x /opt/flocker/wrap_dataset_agent_mtab.sh
-
-ADD flocker-dataset-agent /usr/sbin/flocker-dataset-agent
-RUN chmod +x /usr/sbin/flocker-dataset-agent
-
 # this is for the VNX driver
 RUN mkdir -p /flocker-vnx-driver
 RUN apt-get install -y sg3-utils wget python2.7 python-setuptools
