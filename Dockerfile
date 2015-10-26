@@ -55,3 +55,7 @@ RUN dpkg -i navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
 RUN git clone https://github.com/ClusterHQ/flocker-vnx-driver.git /flocker-vnx-driver
 COPY config.yml.sfdata /flocker-vnx-driver/config.yml
 ENV VNX_CONFIG_FILE /opt/flocker/config.yml
+
+RUN apt-get install -y python-twisted
+
+WORKDIR /flocker-vnx-driver
