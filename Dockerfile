@@ -57,8 +57,8 @@ COPY config.yml.sfdata /flocker-vnx-driver/config.yml
 ENV VNX_CONFIG_FILE /opt/flocker/config.yml
 
 RUN apt-get install -y python-twisted
-sudo apt-get install -y python-yaml
-sudo apt-get install -y python-pip
-sudo pip install bitmath
+RUN sudo apt-get install -y python-yaml
+RUN sudo apt-get install -y python-pip
+RUN sudo pip install bitmath
 
 WORKDIR /flocker-vnx-driver
