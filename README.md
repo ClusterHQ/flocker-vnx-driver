@@ -24,7 +24,7 @@ apt-get install sg3-utils
 python setup.py install
 ```
 
-## Test Setup
+## Standalone Test Setup
 
 Set VNX_CONFIG_FILE:
 
@@ -32,4 +32,10 @@ Set VNX_CONFIG_FILE:
 root@sclf200:~/flocker-vnx-driver# export VNX_CONFIG_FILE=/home/ctoguest/flocker-vnx-driver/config.yml
 ```
 
+### Test inside a Docker container
 
+```
+core@000028aa7f369c9c ~/myechuri/flocker-vnx-driver $ docker build -t myechuri/vnxtest .
+core@000028aa7f369c9c ~/myechuri/flocker-vnx-driver $ docker run -it myechuri/vnxtest
+root@0a290220ae82:/flocker-vnx-driver# trial test_emc_vnx.EMCVnxBlockDeviceAPIInterfaceTests.test_interface
+```
