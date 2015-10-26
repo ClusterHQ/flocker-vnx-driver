@@ -52,10 +52,12 @@ RUN mkdir -p /flocker-vnx-driver
 RUN apt-get install -y sg3-utils wget python2.7 python-setuptools
 RUN wget https://github.com/emc-openstack/naviseccli/raw/master/navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
 RUN dpkg -i navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
+ENV PATH /opt/Navisphere/bin:$PATH
 RUN git clone https://github.com/ClusterHQ/flocker-vnx-driver.git /flocker-vnx-driver
 COPY config.yml.sfdata /flocker-vnx-driver/config.yml
 ENV VNX_CONFIG_FILE /opt/flocker/config.yml
 
+# Prereq packages for testing VNX
 RUN apt-get install -y python-twisted
 RUN sudo apt-get install -y python-yaml
 RUN sudo apt-get install -y python-pip
