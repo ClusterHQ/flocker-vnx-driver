@@ -56,6 +56,7 @@ ENV PATH /opt/Navisphere/bin:$PATH
 RUN git clone https://github.com/ClusterHQ/flocker-vnx-driver.git /flocker-vnx-driver
 COPY config.yml.sfdata /flocker-vnx-driver/config.yml
 ENV VNX_CONFIG_FILE /opt/flocker/config.yml
+ENV PYTHONPATH /opt/flocker/lib/python2.7/site-packages:$PYTHONPATH
 
 # Prereq packages for testing VNX
 RUN apt-get install -y python-twisted
