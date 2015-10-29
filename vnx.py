@@ -33,7 +33,7 @@ class EMCVnxBlockDeviceAPI(object):
     driver_name = 'VNX'
 
     def __init__(self, cluster_id, ip, pool, lun_base):
-        self._client = EMCVNXClient(ip)
+        self._client = EMCVNXClient(ip, lun_base)
         self._cluster_id = cluster_id
         self._pool = pool
         self._hostname = unicode(socket.gethostname())
@@ -41,7 +41,6 @@ class EMCVnxBlockDeviceAPI(object):
         self._client.create_storage_group(self._group)
         self._client.connect_host_to_sg(self._hostname, self._group)
         self._device_path_map = pmap()
-        self._next_lun = lun_base
 
     def _rescan_iscsi(self, number=None):
         check_output(["rescan-scsi-bus", "-r", "-c", "2"])

@@ -4,5 +4,5 @@ control-service:
 dataset:
   backend: "vnx_flocker_driver"
   IP: "10.10.166.9" # SPA
-  LUN_BASE: 5000
+  LUN_BASE: 5000 # temporary fencing for production POC env
   STORAGE_POOL: "ClusterHQ-Test3"
