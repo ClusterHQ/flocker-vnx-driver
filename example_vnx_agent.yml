@@ -3,7 +3,6 @@ control-service:
   hostname: "control-service"
 dataset:
   backend: "vnx_flocker_driver"
-  USER: "ClusterHQ"
-  PASSWORD: "ClusterHQ"
   IP: "10.10.166.9" # SPA
+  LUN_BASE: 5000
   STORAGE_POOL: "ClusterHQ-Test3"

@@ -1,10 +1,7 @@
-import multiprocessing
-import os
 import re
 import time
 
 try:
-    import eventlet
     from eventlet.green import subprocess
 except:
     import subprocess
@@ -66,13 +63,9 @@ class EMCVNXClient(object):
         int)
     LUN_ALL = [LUN_STATE, LUN_STATUS, LUN_NAME, LUN_CAPACITY, LUN_ID]
 
-    def __init__(self, user, password, ip):
-        self.user = user
-        self.pwd = password
+    def __init__(self, ip):
         self.ip = ip
-        self.cli = (CLI_PATH, '-h', self.ip, '-user',
-                    self.user, '-password', self.pwd,
-                    '-scope', '0')
+        self.cli = (CLI_PATH, '-h', self.ip, '-scope', '0')
 
     def check_pool(self, name):
         cmd = self.cli + ('storagepool', '-list', '-name', name)
@@ -97,7 +90,7 @@ class EMCVNXClient(object):
                         self._get_prop_value(each, prop)
                     for prop in self.LUN_ALL
                 }
-                luns.append(lun) 
+                luns.append(lun)
         return luns
 
     def _get_obj_props(self, cmd, props):
@@ -234,11 +227,6 @@ class EMCVNXClient(object):
 
 
 if __name__ == '__main__':
-    cli = EMCVNXClient('sysadmin', 'sysadmin', '192.168.1.94')
-    #cli.check_pool('Pool_1')
-    #if cli.create_volume('flocker-001', '1', 'Pool_1'):
-    #    cli.wait_for_volume('flocker-001')
-    import pdb;pdb.set_trace()
+    cli = EMCVNXClient('192.168.40.13')
     luns = cli.get_all_luns()
     print luns
-

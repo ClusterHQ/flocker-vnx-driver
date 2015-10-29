@@ -31,11 +31,10 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
     config_file_path = os.environ.get('VNX_CONFIG_FILE')
     config_file = open(config_file_path)
     config = yaml.load(config_file.read())
-    user = config['USER']
-    password = config['PASSWORD']
+    lun_base = config['LUN_BASE']
     ip = config['IP']
     pool = config['STORAGE_POOL']
-    api = EMCVnxBlockDeviceAPI(cluster_id, user, password, ip, pool)
+    api = EMCVnxBlockDeviceAPI(cluster_id, ip, pool, lun_base)
     test_case.addCleanup(detach_destroy_volumes, api)
     return api
 
