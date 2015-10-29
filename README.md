@@ -34,8 +34,13 @@ root@sclf200:~/flocker-vnx-driver# export VNX_CONFIG_FILE=/home/ctoguest/flocker
 
 ### Test inside a Docker container
 
+Build and start a container for unit testing.  Mount naviseccli security keys path into container.
+
 ```
-core@000028aa7f369c9c ~/myechuri/flocker-vnx-driver $ docker build -t myechuri/vnxtest .
-core@000028aa7f369c9c ~/myechuri/flocker-vnx-driver $ docker run -it myechuri/vnxtest
+$ ls /home/core/myechuri | grep Secured
+SecuredCLISecurityFile.xml
+SecuredCLIXMLEncrypted.key
+$ docker build -t myechuri/vnxtest .
+$ docker run -v /home/core/myechuri:/root -ti myechuri/vnxtest
 root@0a290220ae82:/flocker-vnx-driver# trial test_emc_vnx.EMCVnxBlockDeviceAPIInterfaceTests.test_interface
 ```
