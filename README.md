@@ -41,6 +41,6 @@ $ ls /home/core/myechuri | grep Secured
 SecuredCLISecurityFile.xml
 SecuredCLIXMLEncrypted.key
 $ docker build -t myechuri/vnxtest .
-$ docker run -v /home/core/myechuri:/root -ti myechuri/vnxtest
+$ docker run -v /home/core/myechuri:/root -v /home/core/navisecclisec:/keys -ti myechuri/vnxtest
 root@0a290220ae82:/flocker-vnx-driver# trial test_emc_vnx.EMCVnxBlockDeviceAPIInterfaceTests.test_interface
 ```
