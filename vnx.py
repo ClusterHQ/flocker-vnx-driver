@@ -41,15 +41,22 @@ class EMCVnxBlockDeviceAPI(object):
         self._client.create_storage_group(self._group)
         self._client.connect_host_to_sg(self._hostname, self._group)
         self._device_path_map = pmap()
+        self.fc_channel1, self.fc_channel2 = self._get_fc_channels()
+
+    def _get_fc_channels(self):
+        # TODO: error handling (in the absence of fc hosts)
+        channels = check_output(["ls", "/sys/class/fc_host"]).split()
+        channel1 = channels[0][len('host'):]
+        channel2 = channels[1][len('host'):]
+        return channel1, channel2
 
     def _rescan_iscsi(self, number=None):
-        # TODO: MPIO
         # Manual testing commands (in case of rescan-scsi-bus issues)
         # check_output(["echo", "1", ">",
         #               "/sys/class/fc_host/host6/issue_lip"])
         # check_output(["echo", "- - -", ">", "/sys/class/fc_host/host6/scan"])
-        check_output(["rescan-scsi-bus", "-r", "-c", "6"])
-        check_output(["rescan-scsi-bus", "-r", "-c", "8"])
+        check_output(["rescan-scsi-bus", "-r", "-c", self.fc_channel1])
+        check_output(["rescan-scsi-bus", "-r", "-c", self.fc_channel2])
 
         # Wait for 60s since lip is asynchronous.
         time.sleep(60)
