@@ -47,7 +47,7 @@ class EMCVnxBlockDeviceAPI(object):
         # on CoreOS.
         # Manual rescan until rescan-scsi-bus issue is resolved.
         # TODO: MPIO
-        # check_output(["rescan-scsi-bus", "-r", "-c", "2"])
+        # check_output(["rescan-scsi-bus", "-r", "-c", "40"])
         check_output(["echo", "1", ">", "/sys/class/fc_host/host6/issue_lip"])
         check_output(["echo", "- - -", ">", "/sys/class/fc_host/host6/scan"])
 
