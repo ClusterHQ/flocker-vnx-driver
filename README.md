@@ -44,6 +44,6 @@ drwxr-xr-x 7 core core 4096 Oct 29 02:34 ..
 -rw-r--r-- 1 root root  288 Nov  2 06:38 SecuredCLISecurityFile.xml
 -rw-r--r-- 1 root root   48 Nov  2 06:38 SecuredCLIXMLEncrypted.key
 $ docker build -t myechuri/vnxtest .
-$ docker run -v /home/core/myechuri:/root -v /home/core/navisecclisec:/keys -ti myechuri/vnxtest
+$ docker run --privileged -v /home/core/myechuri:/root -v /home/core/navisecclisec:/keys -v /dev:/dev -ti myechuri/vnxtest
 root@0a290220ae82:/flocker-vnx-driver# trial test_emc_vnx.EMCVnxBlockDeviceAPIInterfaceTests.test_interface
 ```

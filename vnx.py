@@ -43,13 +43,13 @@ class EMCVnxBlockDeviceAPI(object):
         self._device_path_map = pmap()
 
     def _rescan_iscsi(self, number=None):
-        # rescan-scsi-bus exists with error 2 when run inside a container
-        # on CoreOS.
-        # Manual rescan until rescan-scsi-bus issue is resolved.
         # TODO: MPIO
-        # check_output(["rescan-scsi-bus", "-r", "-c", "40"])
-        check_output(["echo", "1", ">", "/sys/class/fc_host/host6/issue_lip"])
-        check_output(["echo", "- - -", ">", "/sys/class/fc_host/host6/scan"])
+        # Manual testing commands (in case of rescan-scsi-bus issues)
+        # check_output(["echo", "1", ">",
+        #               "/sys/class/fc_host/host6/issue_lip"])
+        # check_output(["echo", "- - -", ">", "/sys/class/fc_host/host6/scan"])
+        check_output(["rescan-scsi-bus", "-r", "-c", "6"])
+        check_output(["rescan-scsi-bus", "-r", "-c", "8"])
 
         # Wait for 60s since lip is asynchronous.
         time.sleep(60)
