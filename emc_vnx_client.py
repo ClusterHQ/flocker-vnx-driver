@@ -130,7 +130,7 @@ class EMCVNXClient(object):
                '-poolName', pool, '-name', name)
         cmd = self.cli + cmd
         rc, out, err = execute(*cmd)
-        self.next_lun = self.next_lun + 1
+        # self.next_lun = self.next_lun + 1
         return rc, out
 
     def wait_for_volume(self, name, timeout=300):
