@@ -11,7 +11,6 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 from subprocess import check_output
 
-import time
 import random
 import socket
 
@@ -55,11 +54,10 @@ class EMCVnxBlockDeviceAPI(object):
         # check_output(["echo", "1", ">",
         #               "/sys/class/fc_host/host6/issue_lip"])
         # check_output(["echo", "- - -", ">", "/sys/class/fc_host/host6/scan"])
+        # Wait for 60s since lip is asynchronous.
+        # time.sleep(60)
         check_output(["rescan-scsi-bus", "-r", "-c", self.fc_channel1])
         check_output(["rescan-scsi-bus", "-r", "-c", self.fc_channel2])
-
-        # Wait for 60s since lip is asynchronous.
-        time.sleep(60)
 
     def _convert_volume_size(self, size):
         """
