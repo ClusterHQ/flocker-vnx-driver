@@ -1,3 +1,0 @@
-IP: "192.168.40.13" # SPA
-STORAGE_POOL: "Docker_Block_Pool"
-NAVISECCLI_KEYS: "/keys"
