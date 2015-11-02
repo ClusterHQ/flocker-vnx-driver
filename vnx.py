@@ -11,7 +11,6 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 from subprocess import check_output
 
-import os
 import random
 import socket
 
@@ -69,7 +68,6 @@ class EMCVnxBlockDeviceAPI(object):
             size=size, dataset_id=dataset_id)
         lun_name = self._get_lun_name_from_blockdevice_id(
             volume.blockdevice_id)
-        out = os.system("lsscsi")
         rc, out = self._client.create_volume(
             lun_name,
             str(self._convert_volume_size(size)),
