@@ -63,13 +63,14 @@ class EMCVNXClient(object):
         int)
     LUN_ALL = [LUN_STATE, LUN_STATUS, LUN_NAME, LUN_CAPACITY, LUN_ID]
 
-    def __init__(self, ip, base_lun):
+    def __init__(self, ip, key_path):
         self.ip = ip
-        self.cli = (CLI_PATH, '-h', self.ip, '-scope', '0')
+        self.key_path = key_path
+        self.cli = (CLI_PATH, '-h', self.ip, '-secfilepath', self.key_path)
 
         # This is a temporary fencing solution for a specific POC.
         # Please do not set ``base_lun`` for generic VNX usage.
-        self.next_lun = base_lun
+        # self.next_lun = base_lun
 
     def check_pool(self, name):
         cmd = self.cli + ('storagepool', '-list', '-name', name)
@@ -123,8 +124,10 @@ class EMCVNXClient(object):
             return None
 
     def create_volume(self, name, size, pool):
+        # TODO: pass in lun number (below) for lun fencing.
+        # '-poolName', pool, '-l', self.next_lun, '-name', name)
         cmd = ('lun', '-create', '-capacity', size, '-sq', 'gb',
-               '-poolName', pool, '-l', self.next_lun, '-name', name)
+               '-poolName', pool, '-name', name)
         cmd = self.cli + cmd
         rc, out, err = execute(*cmd)
         self.next_lun = self.next_lun + 1

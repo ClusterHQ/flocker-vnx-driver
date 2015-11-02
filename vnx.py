@@ -21,8 +21,8 @@ LUN_NAME_PREFIX = 'flocker-'
 _logger = Logger()
 
 
-def vnx_from_configuration(cluster_id, ip, pool, lun_base):
-    return EMCVnxBlockDeviceAPI(cluster_id, ip, pool, lun_base)
+def vnx_from_configuration(cluster_id, ip, pool):
+    return EMCVnxBlockDeviceAPI(cluster_id, ip, pool)
 
 
 @implementer(IBlockDeviceAPI)
@@ -31,8 +31,8 @@ class EMCVnxBlockDeviceAPI(object):
     VERSION = '0.1'
     driver_name = 'VNX'
 
-    def __init__(self, cluster_id, ip, pool, lun_base):
-        self._client = EMCVNXClient(ip, lun_base)
+    def __init__(self, cluster_id, ip, pool, keys):
+        self._client = EMCVNXClient(ip, keys)
         self._cluster_id = cluster_id
         self._pool = pool
         self._hostname = unicode(socket.gethostname())

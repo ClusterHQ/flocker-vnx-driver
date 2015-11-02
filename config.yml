@@ -1,3 +1,4 @@
 IP: "192.168.40.13" # SPA
-LUN_BASE: 5000 # Temporary fencing for POC env
+NAVISECCLI_KEYS: "/keys" # Location of naviseccli keys
+# LUN_BASE: 5000 # Temporary fencing for POC env
 STORAGE_POOL: "Docker_Block_Pool"
