@@ -11,6 +11,7 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 from subprocess import check_output
 
+import time
 import random
 import socket
 
@@ -42,7 +43,16 @@ class EMCVnxBlockDeviceAPI(object):
         self._device_path_map = pmap()
 
     def _rescan_iscsi(self, number=None):
-        check_output(["rescan-scsi-bus", "-r", "-c", "2"])
+        # rescan-scsi-bus exists with error 2 when run inside a container
+        # on CoreOS.
+        # Manual rescan until rescan-scsi-bus issue is resolved.
+        # TODO: MPIO
+        # check_output(["rescan-scsi-bus", "-r", "-c", "2"])
+        check_output(["echo", "1", ">", "/sys/class/fc_host/host6/issue_lip"])
+        check_output(["echo", "- - -", ">", "/sys/class/fc_host/host6/scan"])
+
+        # Wait for 60s since lip is asynchronous.
+        time.sleep(60)
 
     def _convert_volume_size(self, size):
         """
