@@ -56,7 +56,6 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
         'test_attach_unattached_volume',
         'test_attached_volume_listed',
         'test_list_attached_and_unattached',
-        'test_multiple_volumes_attached_to_host',
         'test_detach_unknown_volume',
         'test_detach_detached_volume',
         'test_detach_volume',
