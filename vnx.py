@@ -12,7 +12,7 @@ from zope.interface import implementer
 from subprocess import check_output
 
 import random
-import socket
+# import socket
 
 from emc_vnx_client import EMCVNXClient
 
@@ -31,13 +31,15 @@ class EMCVnxBlockDeviceAPI(object):
     VERSION = '0.1'
     driver_name = 'VNX'
 
-    def __init__(self, cluster_id, ip, pool, keys):
+    def __init__(self, cluster_id, ip, pool, host, group, keys):
         self._client = EMCVNXClient(ip, keys)
         self._cluster_id = cluster_id
         self._pool = pool
-        self._hostname = unicode(socket.gethostname())
+        self._hostname = unicode(host)
+        self._group = unicode(group)
+        # self._hostname = unicode(socket.gethostname())
         # hardcoded preprovisioned group for poc
-        self._group = u'Docker_Block'
+        # self._group = u'Docker_Block'
         # self._group = u'Flocker' + self._hostname
         # self._client.create_storage_group(self._group)
         # self._client.connect_host_to_sg(self._hostname, self._group)

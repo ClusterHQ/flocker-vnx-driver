@@ -34,7 +34,9 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
     ip = config['IP']
     pool = config['STORAGE_POOL']
     keys = config['NAVISECCLI_KEYS']
-    api = EMCVnxBlockDeviceAPI(cluster_id, ip, pool, keys)
+    group = config['STORAGE_GROUP']
+    host = config['HOSTNAME']
+    api = EMCVnxBlockDeviceAPI(cluster_id, ip, pool, host, group, keys)
     test_case.addCleanup(detach_destroy_volumes, api)
     return api
 
@@ -56,6 +58,7 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
         'test_attach_unattached_volume',
         'test_attached_volume_listed',
         'test_list_attached_and_unattached',
+        'test_multiple_volumes_attached_to_host',
         'test_detach_unknown_volume',
         'test_detach_detached_volume',
         'test_detach_volume',
