@@ -60,6 +60,8 @@ class EMCVnxBlockDeviceAPI(object):
         # check_output(["echo", "- - -", ">", "/sys/class/fc_host/host6/scan"])
         # Wait for 60s since lip is asynchronous.
         # time.sleep(60)
+        # XXX: This is buggy. See:
+        # https://bugzilla.novell.com/show_bug.cgi?id=815156#c8
         check_output(["rescan-scsi-bus", "-r", "-c", self.fc_channel1])
         check_output(["rescan-scsi-bus", "-r", "-c", self.fc_channel2])
 
