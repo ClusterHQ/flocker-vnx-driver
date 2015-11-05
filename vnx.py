@@ -147,8 +147,11 @@ class EMCVnxBlockDeviceAPI(object):
         rc, out = self._client.add_volume_to_sg(str(hlu),
                                                 str(alu),
                                                 self._group)
-        if rc == 66:
-            raise AlreadyAttachedVolume(blockdevice_id)
+        if rc != 0:
+            if rc == 66:
+                raise AlreadyAttachedVolume(blockdevice_id)
+            else:
+                raise Exception('Called process error', rc, out)
 
         volume = _blockdevicevolume_from_blockdevice_id(
             blockdevice_id=blockdevice_id,
