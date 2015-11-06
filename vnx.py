@@ -102,7 +102,7 @@ class EMCVnxBlockDeviceAPI(object):
                     rc=rc,
                     out=out).write(_logger)
         if rc != 0:
-            raise Exception(out)
+            raise Exception(rc, out)
         return volume
 
     def destroy_volume(self, blockdevice_id):
@@ -119,7 +119,7 @@ class EMCVnxBlockDeviceAPI(object):
             if rc == 9:
                 raise UnknownVolume(blockdevice_id)
             else:
-                raise Exception(out)
+                raise Exception(rc, out)
 
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(operation=u'attach_volume',
@@ -140,7 +140,7 @@ class EMCVnxBlockDeviceAPI(object):
             if rc == 66:
                 raise AlreadyAttachedVolume(blockdevice_id)
             else:
-                raise Exception('Called process error', rc, out)
+                raise Exception(rc, out)
 
         volume = _blockdevicevolume_from_blockdevice_id(
             blockdevice_id=blockdevice_id,
@@ -159,7 +159,6 @@ class EMCVnxBlockDeviceAPI(object):
                 raise Exception('Time out waiting for', wwn_path)
             else:
                 time.sleep(1)
-
         new_device = wwn_path.realpath()
         self._device_path_map = self._device_path_map.set(
             blockdevice_id, new_device
@@ -183,7 +182,7 @@ class EMCVnxBlockDeviceAPI(object):
         alu = lun['lun_id']
         rc, out = self._client.get_storage_group(self._group)
         if rc != 0:
-            raise Exception('SG does not exist')
+            raise Exception(rc, out)
 
         try:
             hlu = self._client.parse_sg_content(out)['lunmap'][alu]
