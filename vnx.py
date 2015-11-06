@@ -154,8 +154,9 @@ class EMCVnxBlockDeviceAPI(object):
             size=int(lun['total_capacity_gb']*1024*1024*1024),
             attached_to=unicode(attach_to)
         )
+        lun_uid = lun['lun_uid']
         wwn_path = FilePath(
-            '/dev/disk/by-id/wwn-0x{}'.format(lun['lun_uid'])
+            '/dev/disk/by-id/wwn-0x{}'.format(lun_uid)
         )
 
         # Rescan and wait for the expected device 3 times and wait successively
@@ -172,10 +173,15 @@ class EMCVnxBlockDeviceAPI(object):
                 break
             except Timeout:
                 if counter > 3:
+                    elapsed_time = time.time() - start_time
                     raise Timeout(
-                        "WWN device never appeared",
-                        wwn_path,
-                        time.time() - start_time
+                        "WWN device did not appear. "
+                        "Waited {}s and performed {} scsi bus rescans.".format(
+                            wwn_path,
+                            elapsed_time,
+                            counter,
+                        ),
+                        wwn_path, elapsed_time, counter
                     )
                 else:
                     counter += 1
@@ -185,13 +191,16 @@ class EMCVnxBlockDeviceAPI(object):
         self._device_path_map = self._device_path_map.set(
             blockdevice_id, new_device
         )
-        Message.new(operation=u'attach_volume_output',
-                    blockdevice_id=blockdevice_id,
-                    attach_to=attach_to,
-                    lun_name=lun_name,
-                    alu=alu,
-                    hlu=hlu,
-                    device_path_map=self._device_path_map).write()
+        Message.new(
+            operation=u'attach_volume_output',
+            blockdevice_id=blockdevice_id,
+            attach_to=attach_to,
+            lun_name=lun_name,
+            alu=alu,
+            hlu=hlu,
+            lun_uid=lun_uid,
+            device_path_map=repr(self._device_path_map)
+        ).write()
         return volume
 
     def detach_volume(self, blockdevice_id):
