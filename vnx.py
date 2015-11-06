@@ -211,7 +211,8 @@ class EMCVnxBlockDeviceAPI(object):
         # get lun_map of this node
         rc, out = self._client.get_storage_group(self._group)
         if rc != 0:
-            raise Exception('SG does not exist')
+            raise Exception(rc, out)
+
         lun_map = self._client.parse_sg_content(out)['lunmap']
 
         # add luns which belong to flocker
@@ -265,7 +266,7 @@ class EMCVnxBlockDeviceAPI(object):
     def choose_hlu(self, sg_name):
         rc, out = self._client.get_storage_group(sg_name)
         if rc != 0:
-            raise Exception('SG does not exist')
+            raise Exception(rc, out)
         lun_map = self._client.parse_sg_content(out)['lunmap']
-        candicates = list(set(range(1, 256)) - set(lun_map.values()))
-        return candicates[random.randint(0, len(candicates)-1)]
+        candidates = list(set(range(1, 256)) - set(lun_map.values()))
+        return candidates[random.randint(0, len(candidates)-1)]
