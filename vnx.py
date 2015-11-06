@@ -72,6 +72,8 @@ class EMCVnxBlockDeviceAPI(object):
                     ["rescan-scsi-bus", "-r", "-c", channel_number],
                     stderr=discard
                 )
+                # XXX: Only scan the first bus for now.
+                break
 
     def _convert_volume_size(self, size):
         """
