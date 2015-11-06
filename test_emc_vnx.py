@@ -8,6 +8,7 @@ using a VNX cluster.
 """
 
 import os
+import sys
 import yaml
 from uuid import uuid4
 
@@ -20,6 +21,10 @@ from vnx import EMCVnxBlockDeviceAPI
 from flocker.node.agents.test.test_blockdevice import (
     make_iblockdeviceapi_tests, detach_destroy_volumes
 )
+
+if os.path.basename(sys.argv[0]) == "trial":
+    from eliot.twisted import redirectLogsForTrial
+    redirectLogsForTrial()
 
 
 def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
