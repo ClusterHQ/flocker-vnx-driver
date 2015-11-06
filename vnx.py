@@ -1,7 +1,7 @@
 from flocker.node.agents.blockdevice import (
     AlreadyAttachedVolume, UnknownVolume, UnattachedVolume,
     IBlockDeviceAPI, _blockdevicevolume_from_dataset_id,
-    _blockdevicevolume_from_blockdevice_id
+    _blockdevicevolume_from_blockdevice_id,
 )
 
 from eliot import Message, Logger
@@ -134,7 +134,6 @@ class EMCVnxBlockDeviceAPI(object):
                     attach_to=attach_to).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         lun = self._client.get_lun_by_name(lun_name)
-        lun_uid = lun['lun_uid']
 
         if lun == {}:
             raise UnknownVolume(blockdevice_id)
@@ -157,6 +156,7 @@ class EMCVnxBlockDeviceAPI(object):
         )
         # Rescan scsi bus to discover new volume
         self._rescan_iscsi(hlu)
+        lun_uid = lun['lun_uid']
         byid = FilePath('/dev/disk/by-id')
         wwns = [p for p in byid.children() if p.basename().startswith('wwn-')]
         [new_device] = [p.realpath() for p in wwns if p.path.endswith(lun_uid)]

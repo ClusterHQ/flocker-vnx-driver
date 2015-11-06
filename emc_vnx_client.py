@@ -114,8 +114,6 @@ class EMCVNXClient(object):
                     self._get_prop_value(out, prop)
                 for prop in props
             }
-        else:
-            raise Exception(rc, out, err)
         return data
 
     def _get_prop_value(self, out, prop):
