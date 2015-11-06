@@ -115,8 +115,11 @@ class EMCVnxBlockDeviceAPI(object):
                     lun_name=lun_name,
                     rc=rc,
                     out=out).write(_logger)
-        if rc == 9:
-            raise UnknownVolume(blockdevice_id)
+        if rc != 0:
+            if rc == 9:
+                raise UnknownVolume(blockdevice_id)
+            else:
+                raise Exception(out)
 
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(operation=u'attach_volume',
