@@ -45,16 +45,8 @@ class EMCVnxBlockDeviceAPI(object):
         # self._client.create_storage_group(self._group)
         # self._client.connect_host_to_sg(self._hostname, self._group)
         self._device_path_map = pmap()
-        (self.fc_channel1, self.fc_channel2) = self._get_fc_channels()
 
-    def _get_fc_channels(self):
-        # TODO: error handling (in the absence of fc hosts)
-        channels = check_output(["ls", "/sys/class/fc_host"]).split()
-        channel1 = channels[0][len('host'):]
-        channel2 = channels[1][len('host'):]
-        return (channel1, channel2)
-
-    def _rescan_iscsi(self, number=None):
+    def _rescan_scsi_bus(self):
         # Manual testing commands (in case of rescan-scsi-bus issues)
         # check_output(["echo", "1", ">",
         #               "/sys/class/fc_host/host6/issue_lip"])
@@ -63,8 +55,9 @@ class EMCVnxBlockDeviceAPI(object):
         # time.sleep(60)
         # XXX: This is buggy. See:
         # https://bugzilla.novell.com/show_bug.cgi?id=815156#c8
-        check_output(["rescan-scsi-bus", "-r", "-c", self.fc_channel1])
-        check_output(["rescan-scsi-bus", "-r", "-c", self.fc_channel2])
+        for p in FilePath("/sys/class/fc_host").children():
+            channel_number = p.basename()[len('host'):]
+            check_output(["rescan-scsi-bus", "-r", "-c", channel_number])
 
     def _convert_volume_size(self, size):
         """
@@ -145,7 +138,7 @@ class EMCVnxBlockDeviceAPI(object):
             attached_to=unicode(attach_to)
         )
         # Rescan scsi bus to discover new volume
-        self._rescan_iscsi(hlu)
+        self._rescan_scsi_bus()
         wwn_path = FilePath(
             '/dev/disk/by-id/wwn-0x{}'.format(lun['lun_uid'])
         )
@@ -188,7 +181,7 @@ class EMCVnxBlockDeviceAPI(object):
             raise UnattachedVolume(blockdevice_id)
 
         self._client.remove_volume_from_sg(str(hlu), self._group)
-        self._rescan_iscsi(hlu)
+        self._rescan_scsi_bus()
         self._device_path_map = self._device_path_map.remove(blockdevice_id)
         Message.new(operation=u'detach_volume_output',
                     blockdevice_id=blockdevice_id,
