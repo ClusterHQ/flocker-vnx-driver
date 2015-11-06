@@ -223,7 +223,7 @@ class EMCVnxBlockDeviceAPI(object):
                     hlu=hlu,
                     rc=rc,
                     out=out,
-                    device_path_map=self._device_path_map).write()
+                    device_path_map=repr(self._device_path_map)).write()
 
     def list_volumes(self):
         volumes = []
