@@ -118,18 +118,6 @@ class EMCVnxBlockDeviceAPI(object):
         if rc == 9:
             raise UnknownVolume(blockdevice_id)
 
-    def _get_device_list(self):
-        """
-        """
-        output = check_output([b"lsscsi"])
-        device_names = []
-        Message.new(operation=u'lsscsi',
-                    output=output).write(_logger)
-        for line in output.splitlines():
-            device_file = line.split()[5]
-            device_names.append(device_file)
-        return set(device_names)
-
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(operation=u'attach_volume',
                     blockdevice_id=blockdevice_id,
