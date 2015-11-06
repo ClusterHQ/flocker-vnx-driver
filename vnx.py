@@ -85,21 +85,23 @@ class EMCVnxBlockDeviceAPI(object):
                     dataset_id=str(dataset_id),
                     size=size).write(_logger)
         volume = _blockdevicevolume_from_dataset_id(
-            size=size, dataset_id=dataset_id)
+            size=size, dataset_id=dataset_id
+        )
         lun_name = self._get_lun_name_from_blockdevice_id(
-            volume.blockdevice_id)
+            volume.blockdevice_id
+        )
         rc, out = self._client.create_volume(
             lun_name,
             str(self._convert_volume_size(size)),
-            self._pool)
+            self._pool
+        )
         Message.new(operation=u'create_volume_output',
                     dataset_id=str(dataset_id),
                     size=size,
                     lun_name=lun_name,
                     rc=rc,
                     out=out).write(_logger)
-        if rc != 0 and out.find('Unable to create the LUN \
-                because the specified name is already in use') == -1:
+        if rc != 0:
             raise Exception(out)
         return volume
 
