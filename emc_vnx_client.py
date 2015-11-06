@@ -1,10 +1,7 @@
 import re
 import time
 
-try:
-    from eventlet.green import subprocess
-except:
-    import subprocess
+import subprocess
 
 
 CLI_PATH = '/opt/Navisphere/bin/naviseccli'
@@ -14,7 +11,7 @@ def execute(*cmd):
     try:
         _PIPE = subprocess.PIPE
         obj = subprocess.Popen(
-            cmd, stdin=_PIPE, stdout=_PIPE, stderr=_PIPE,
+            cmd, stdin=_PIPE, stdout=_PIPE,
             close_fds=True, shell=False)
         out, err = obj.communicate()
         obj.stdin.close()
