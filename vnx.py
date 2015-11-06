@@ -164,7 +164,7 @@ class EMCVnxBlockDeviceAPI(object):
         start_time = time.time()
         while not wwn_path.exists():
             elapsed_time = time.time() - start_time
-            if elapsed_time > 5:
+            if elapsed_time > 10:
                 raise Exception('Time out waiting for', wwn_path)
             else:
                 time.sleep(1)
