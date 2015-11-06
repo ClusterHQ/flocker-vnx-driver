@@ -24,6 +24,24 @@ def vnx_from_configuration(cluster_id, ip, pool):
     return EMCVnxBlockDeviceAPI(cluster_id, ip, pool)
 
 
+class Timeout(Exception):
+    """
+    """
+
+
+def wait_for(predicate, timeout):
+    start_time = time.time()
+    while True:
+        result = predicate()
+        if result:
+            return result
+        elapsed_time = time.time() - start_time
+        if elapsed_time > timeout:
+            raise Timeout(predicate)
+        else:
+            time.sleep(1)
+
+
 @implementer(IBlockDeviceAPI)
 class EMCVnxBlockDeviceAPI(object):
 
@@ -134,19 +152,34 @@ class EMCVnxBlockDeviceAPI(object):
             size=int(lun['total_capacity_gb']*1024*1024*1024),
             attached_to=unicode(attach_to)
         )
-        # Rescan scsi bus to discover new volume
-        self._rescan_scsi_bus()
         wwn_path = FilePath(
             '/dev/disk/by-id/wwn-0x{}'.format(lun['lun_uid'])
         )
+
+        # Rescan and wait for the expected device 3 times and wait successively
+        # longer for the device to appear.
+        counter = 1
         start_time = time.time()
-        while not wwn_path.exists():
-            elapsed_time = time.time() - start_time
-            if elapsed_time > 10:
-                raise Exception('Time out waiting for', wwn_path)
-            else:
-                time.sleep(1)
+        while True:
+            self._rescan_scsi_bus()
+            try:
+                wait_for(
+                    predicate=wwn_path.exists,
+                    timeout=5 * counter
+                )
+                break
+            except Timeout:
+                if counter > 3:
+                    raise Timeout(
+                        "WWN device never appeared",
+                        wwn_path,
+                        time.time() - start_time
+                    )
+                else:
+                    counter += 1
+
         new_device = wwn_path.realpath()
+
         self._device_path_map = self._device_path_map.set(
             blockdevice_id, new_device
         )
