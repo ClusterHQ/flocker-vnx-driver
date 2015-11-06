@@ -7,20 +7,17 @@ from flocker.node.agents.blockdevice import (
     _blockdevicevolume_from_blockdevice_id,
 )
 
-from eliot import Message, Logger
+from eliot import Message
 from pyrsistent import pmap
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 from subprocess import check_output
 
 import random
-# import socket
 
 from emc_vnx_client import EMCVNXClient
 
 LUN_NAME_PREFIX = 'flocker-'
-
-_logger = Logger()
 
 
 def vnx_from_configuration(cluster_id, ip, pool):
@@ -39,12 +36,6 @@ class EMCVnxBlockDeviceAPI(object):
         self._pool = pool
         self._hostname = unicode(host)
         self._group = unicode(group)
-        # self._hostname = unicode(socket.gethostname())
-        # hardcoded preprovisioned group for poc
-        # self._group = u'Docker_Block'
-        # self._group = u'Flocker' + self._hostname
-        # self._client.create_storage_group(self._group)
-        # self._client.connect_host_to_sg(self._hostname, self._group)
         self._device_path_map = pmap()
 
     def _rescan_scsi_bus(self):
@@ -71,19 +62,15 @@ class EMCVnxBlockDeviceAPI(object):
         return size/(1024*1024*1024)
 
     def _get_lun_name_from_blockdevice_id(self, blockdevice_id):
-        """
-        """
         return LUN_NAME_PREFIX + str(blockdevice_id)
 
     def _get_blockdevice_id_from_lun_name(self, lun_name):
-        """
-        """
         return unicode(lun_name.split(LUN_NAME_PREFIX, 1)[1])
 
     def create_volume(self, dataset_id, size):
         Message.new(operation=u'create_volume',
                     dataset_id=str(dataset_id),
-                    size=size).write(_logger)
+                    size=size).write()
         volume = _blockdevicevolume_from_dataset_id(
             size=size, dataset_id=dataset_id
         )
@@ -100,21 +87,21 @@ class EMCVnxBlockDeviceAPI(object):
                     size=size,
                     lun_name=lun_name,
                     rc=rc,
-                    out=out).write(_logger)
+                    out=out).write()
         if rc != 0:
             raise Exception(rc, out)
         return volume
 
     def destroy_volume(self, blockdevice_id):
         Message.new(operation=u'destroy_volume',
-                    blockdevice_id=blockdevice_id).write(_logger)
+                    blockdevice_id=blockdevice_id).write()
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         rc, out = self._client.destroy_volume(lun_name)
         Message.new(operation=u'destroy_volume_output',
                     blockdevice_id=blockdevice_id,
                     lun_name=lun_name,
                     rc=rc,
-                    out=out).write(_logger)
+                    out=out).write()
         if rc != 0:
             if rc == 9:
                 raise UnknownVolume(blockdevice_id)
@@ -124,7 +111,7 @@ class EMCVnxBlockDeviceAPI(object):
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(operation=u'attach_volume',
                     blockdevice_id=blockdevice_id,
-                    attach_to=attach_to).write(_logger)
+                    attach_to=attach_to).write()
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         lun = self._client.get_lun_by_name(lun_name)
 
@@ -174,7 +161,7 @@ class EMCVnxBlockDeviceAPI(object):
 
     def detach_volume(self, blockdevice_id):
         Message.new(operation=u'detach_volume',
-                    blockdevice_id=blockdevice_id).write(_logger)
+                    blockdevice_id=blockdevice_id).write()
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         lun = self._client.get_lun_by_name(lun_name)
         if lun == {}:
@@ -239,7 +226,7 @@ class EMCVnxBlockDeviceAPI(object):
 
     def get_device_path(self, blockdevice_id):
         Message.new(operation=u'get_device_path',
-                    blockdevice_id=blockdevice_id).write(_logger)
+                    blockdevice_id=blockdevice_id).write()
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         lun = self._client.get_lun_by_name(lun_name)
         if lun == {}:
@@ -255,7 +242,7 @@ class EMCVnxBlockDeviceAPI(object):
     def allocation_unit(self):
         allocation_unit = 1
         Message.new(operation=u'allocation_unit',
-                    allocation_unit=allocation_unit).write(_logger)
+                    allocation_unit=allocation_unit).write()
         return allocation_unit
 
     def compute_instance_id(self):
