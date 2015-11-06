@@ -184,8 +184,9 @@ class EMCVnxBlockDeviceAPI(object):
         if rc != 0:
             raise Exception(rc, out)
 
+        lunmap = self._client.parse_sg_content(out)['lunmap']
         try:
-            hlu = self._client.parse_sg_content(out)['lunmap'][alu]
+            hlu = lunmap[alu]
         except KeyError:
             raise UnattachedVolume(blockdevice_id)
 
