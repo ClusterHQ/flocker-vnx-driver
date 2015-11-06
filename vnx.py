@@ -1,3 +1,5 @@
+import time
+
 from flocker.node.agents.blockdevice import (
     AlreadyAttachedVolume, UnknownVolume, UnattachedVolume,
     IBlockDeviceAPI, _blockdevicevolume_from_dataset_id,
@@ -156,10 +158,18 @@ class EMCVnxBlockDeviceAPI(object):
         )
         # Rescan scsi bus to discover new volume
         self._rescan_iscsi(hlu)
-        lun_uid = lun['lun_uid']
-        byid = FilePath('/dev/disk/by-id')
-        wwns = [p for p in byid.children() if p.basename().startswith('wwn-')]
-        [new_device] = [p.realpath() for p in wwns if p.path.endswith(lun_uid)]
+        wwn_path = FilePath(
+            '/dev/disk/by-id/wwn-0x{}'.format(lun['lun_uid'])
+        )
+        start_time = time.time()
+        while not wwn_path.exists():
+            elapsed_time = time.time() - start_time
+            if elapsed_time > 5:
+                raise Exception('Time out waiting for', wwn_path)
+            else:
+                time.sleep(1)
+
+        new_device = wwn_path.realpath()
         self._device_path_map = self._device_path_map.set(
             blockdevice_id, new_device
         )
