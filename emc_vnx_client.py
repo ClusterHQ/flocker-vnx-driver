@@ -61,7 +61,14 @@ class EMCVNXClient(object):
         'LOGICAL UNIT NUMBER\s*(\d+)\s*',
         'lun_id',
         int)
-    LUN_ALL = [LUN_STATE, LUN_STATUS, LUN_NAME, LUN_CAPACITY, LUN_ID]
+
+    LUN_UID = PropertyDescriptor(
+        '-id',
+        'UID:\s*([0-9A-F:]+)\s*',
+        'lun_uid',
+        lambda val: val.replace(':', '').lower())
+
+    LUN_ALL = [LUN_STATE, LUN_STATUS, LUN_NAME, LUN_CAPACITY, LUN_ID, LUN_UID]
 
     def __init__(self, ip, key_path):
         self.ip = ip
@@ -107,6 +114,8 @@ class EMCVNXClient(object):
                     self._get_prop_value(out, prop)
                 for prop in props
             }
+        else:
+            raise Exception(rc, out, err)
         return data
 
     def _get_prop_value(self, out, prop):

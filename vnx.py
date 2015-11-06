@@ -1,4 +1,3 @@
-
 from flocker.node.agents.blockdevice import (
     AlreadyAttachedVolume, UnknownVolume, UnattachedVolume,
     IBlockDeviceAPI, _blockdevicevolume_from_dataset_id,
@@ -135,14 +134,12 @@ class EMCVnxBlockDeviceAPI(object):
                     attach_to=attach_to).write(_logger)
         lun_name = self._get_lun_name_from_blockdevice_id(blockdevice_id)
         lun = self._client.get_lun_by_name(lun_name)
+        lun_uid = lun['lun_uid']
+
         if lun == {}:
             raise UnknownVolume(blockdevice_id)
         alu = lun['lun_id']
         hlu = self.choose_hlu(self._group)
-
-        # Get list of devices before adding volume to storage group
-        self._rescan_iscsi(hlu)
-        devices_before_attach = self._get_device_list()
 
         rc, out = self._client.add_volume_to_sg(str(hlu),
                                                 str(alu),
@@ -160,18 +157,18 @@ class EMCVnxBlockDeviceAPI(object):
         )
         # Rescan scsi bus to discover new volume
         self._rescan_iscsi(hlu)
-        devices_after_attach = self._get_device_list()
-        new_device = list(devices_after_attach - devices_before_attach)[0]
-        self._device_path_map = self._device_path_map.set(blockdevice_id,
-                                                          FilePath(new_device))
+        byid = FilePath('/dev/disk/by-id')
+        wwns = [p for p in byid.children() if p.basename().startswith('wwn-')]
+        [new_device] = [p.realpath() for p in wwns if p.path.endswith(lun_uid)]
+        self._device_path_map = self._device_path_map.set(
+            blockdevice_id, new_device
+        )
         Message.new(operation=u'attach_volume_output',
                     blockdevice_id=blockdevice_id,
                     attach_to=attach_to,
                     lun_name=lun_name,
                     alu=alu,
                     hlu=hlu,
-                    devices_before_attach=devices_before_attach,
-                    devices_after_attach=devices_after_attach,
                     device_path_map=self._device_path_map).write()
         return volume
 
