@@ -1,3 +1,4 @@
+import os
 import time
 
 from flocker.node.agents.blockdevice import (
@@ -55,9 +56,13 @@ class EMCVnxBlockDeviceAPI(object):
         # time.sleep(60)
         # XXX: This is buggy. See:
         # https://bugzilla.novell.com/show_bug.cgi?id=815156#c8
-        for p in FilePath("/sys/class/fc_host").children():
-            channel_number = p.basename()[len('host'):]
-            check_output(["rescan-scsi-bus", "-r", "-c", channel_number])
+        with open(os.devnull, 'w') as discard:
+            for p in FilePath("/sys/class/fc_host").children():
+                channel_number = p.basename()[len('host'):]
+                check_output(
+                    ["rescan-scsi-bus", "-r", "-c", channel_number],
+                    stderr=discard
+                )
 
     def _convert_volume_size(self, size):
         """
