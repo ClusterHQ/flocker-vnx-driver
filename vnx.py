@@ -190,7 +190,10 @@ class EMCVnxBlockDeviceAPI(object):
         except KeyError:
             raise UnattachedVolume(blockdevice_id)
 
-        self._client.remove_volume_from_sg(str(hlu), self._group)
+        rc, out = self._client.remove_volume_from_sg(str(hlu), self._group)
+        if rc != 0:
+            raise Exception(rc, out)
+
         self._rescan_scsi_bus()
         self._device_path_map = self._device_path_map.remove(blockdevice_id)
         Message.new(operation=u'detach_volume_output',
