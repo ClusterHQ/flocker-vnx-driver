@@ -69,7 +69,8 @@ class EMCVnxBlockDeviceAPI(object):
             for p in FilePath("/sys/class/fc_host").children():
                 channel_number = p.basename()[len('host'):]
                 check_output(
-                    ["rescan-scsi-bus", "-r", "-c", channel_number],
+                    ["rescan-scsi-bus", "--remove",
+                     "--channel", channel_number],
                     stderr=discard
                 )
                 # XXX: Only scan the first bus for now.
