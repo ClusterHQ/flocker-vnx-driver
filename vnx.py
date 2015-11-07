@@ -177,6 +177,7 @@ class EMCVnxBlockDeviceAPI(object):
                     elapsed_time = time.time() - start_time
                     raise Timeout(
                         "WWN device did not appear. "
+                        "Expected {}. "
                         "Waited {}s and performed {} scsi bus rescans.".format(
                             wwn_path,
                             elapsed_time,
