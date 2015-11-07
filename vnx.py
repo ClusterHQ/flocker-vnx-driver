@@ -11,7 +11,7 @@ from eliot import Message
 from pyrsistent import pmap
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
-from subprocess import check_output
+from subprocess import check_output, CalledProcessError
 
 import random
 
@@ -135,25 +135,23 @@ class EMCVnxBlockDeviceAPI(object):
             size=int(lun['total_capacity_gb']*1024*1024*1024),
             attached_to=unicode(attach_to)
         )
-        lun_uid = lun['lun_uid']
-        wwn_path = FilePath(
-            '/dev/disk/by-id/wwn-0x{}'.format(lun_uid)
-        )
 
-        # Rescan and wait for the expected device 3 times and wait successively
+        # Rescan and wait for the expected bus 3 times and wait successively
         # longer for the device to appear.
         counter = 1
         start_time = time.time()
+        hlu_bus = FilePath(
+            '/sys/class/scsi_disk/1:0:0:{}'.format(hlu)
+        )
         while True:
             with open(os.devnull, 'w') as discard:
                 check_output(
                     ["rescan-scsi-bus", "--luns={}".format(hlu)],
                     stderr=discard
                 )
-
             try:
                 wait_for(
-                    predicate=wwn_path.exists,
+                    predicate=hlu_bus.exists,
                     timeout=5 * counter
                 )
                 break
@@ -162,19 +160,59 @@ class EMCVnxBlockDeviceAPI(object):
                     import pdb; pdb.set_trace()
                     elapsed_time = time.time() - start_time
                     raise Timeout(
-                        "WWN device did not appear. "
+                        "HLU bus did not appear. "
                         "Expected {}. "
                         "Waited {}s and performed {} scsi bus rescans.".format(
-                            wwn_path,
+                            hlu_bus,
                             elapsed_time,
                             counter,
                         ),
-                        wwn_path, elapsed_time, counter
+                        hlu_bus, elapsed_time, counter
                     )
                 else:
                     counter += 1
 
-        new_device = wwn_path.realpath()
+        def device_is_usable(device_path):
+            try:
+                check_output(['lsblk', device_path.path])
+            except CalledProcessError:
+                return False
+            else:
+                return True
+
+        [device_name_pointer] = hlu_bus.descendant(
+            ['device', 'block']
+        ).children()
+        new_device = FilePath('/dev').child(
+            device_name_pointer.basename()
+        )
+        rescan_device = hlu_bus.descendant(['device', 'rescan'])
+        counter = 1
+        while True:
+            try:
+                wait_for(
+                    predicate=lambda: device_is_usable(new_device),
+                    timeout=5 * counter
+                )
+                break
+            except Timeout:
+                if counter > 3:
+                    import pdb; pdb.set_trace()
+                    elapsed_time = time.time() - start_time
+                    raise Timeout(
+                        "Device did not appear. "
+                        "Expected {}. "
+                        "Waited {}s and performed {} scsi bus rescans.".format(
+                            new_device,
+                            elapsed_time,
+                            counter,
+                        ),
+                        new_device, elapsed_time, counter
+                    )
+                else:
+                    with rescan_device.open('w') as f:
+                        f.write('1\n')
+                    counter += 1
 
         self._device_path_map = self._device_path_map.set(
             blockdevice_id, new_device
@@ -186,7 +224,6 @@ class EMCVnxBlockDeviceAPI(object):
             lun_name=lun_name,
             alu=alu,
             hlu=hlu,
-            lun_uid=lun_uid,
             device_path_map=repr(self._device_path_map)
         ).write()
         return volume
