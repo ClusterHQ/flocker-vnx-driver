@@ -138,6 +138,8 @@ class EMCVnxBlockDeviceAPI(object):
 
         # Rescan and wait for the expected bus 3 times and wait successively
         # longer for the device to appear.
+        # Sometimes the bus doesn't appear until you rescan repeatedly.
+        # XXX Often it never appears....which is a problem
         counter = 1
         start_time = time.time()
         hlu_bus = FilePath(
@@ -172,6 +174,13 @@ class EMCVnxBlockDeviceAPI(object):
                 else:
                     counter += 1
 
+        # Once the bus is available we can discover the device path and check
+        # that the device path is usable It may not be usable. For example the
+        # device is sometimes initially 0 size until you force a rescan:
+
+        # (echo 1 > /sys/class/scsi_disk/1:0:0:219/device/rescan)
+        # Nov 07 04:55:40 00009bb1a4558a12 kernel: sd 1:0:0:219: [sdup] 16777216 512-byte logical blocks: (8.58 GB/8.00 GiB)
+        # Nov 07 04:55:40 00009bb1a4558a12 kernel: sdup: detected capacity change from 0 to 8589934592
         def device_is_usable(device_path):
             try:
                 check_output(['lsblk', device_path.path])
@@ -246,6 +255,8 @@ class EMCVnxBlockDeviceAPI(object):
         except KeyError:
             raise UnattachedVolume(blockdevice_id)
 
+        # Delete the specific buses that we're detached *before* we remove the
+        # LUN from the Storage group
         for child in FilePath('/sys/bus/scsi/drivers/sd').children():
             alu_suffix = ':{}'.format(hlu)
             if child.basename().endswith(alu_suffix):
