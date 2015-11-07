@@ -56,26 +56,6 @@ class EMCVnxBlockDeviceAPI(object):
         self._group = unicode(group)
         self._device_path_map = pmap()
 
-    def _rescan_scsi_bus(self):
-        # Manual testing commands (in case of rescan-scsi-bus issues)
-        # check_output(["echo", "1", ">",
-        #               "/sys/class/fc_host/host6/issue_lip"])
-        # check_output(["echo", "- - -", ">", "/sys/class/fc_host/host6/scan"])
-        # Wait for 60s since lip is asynchronous.
-        # time.sleep(60)
-        # XXX: This is buggy. See:
-        # https://bugzilla.novell.com/show_bug.cgi?id=815156#c8
-        with open(os.devnull, 'w') as discard:
-            for p in FilePath("/sys/class/fc_host").children():
-                channel_number = p.basename()[len('host'):]
-                check_output(
-                    ["rescan-scsi-bus", "--remove",
-                     "--channel", channel_number],
-                    stderr=discard
-                )
-                # XXX: Only scan the first bus for now.
-                break
-
     def _convert_volume_size(self, size):
         """
         convert KB to GB
@@ -165,7 +145,12 @@ class EMCVnxBlockDeviceAPI(object):
         counter = 1
         start_time = time.time()
         while True:
-            self._rescan_scsi_bus()
+            with open(os.devnull, 'w') as discard:
+                check_output(
+                    ["rescan-scsi-bus", "--luns={}".format(hlu)],
+                    stderr=discard
+                )
+
             try:
                 wait_for(
                     predicate=wwn_path.exists,
@@ -174,6 +159,7 @@ class EMCVnxBlockDeviceAPI(object):
                 break
             except Timeout:
                 if counter > 3:
+                    import pdb; pdb.set_trace()
                     elapsed_time = time.time() - start_time
                     raise Timeout(
                         "WWN device did not appear. "
@@ -223,11 +209,16 @@ class EMCVnxBlockDeviceAPI(object):
         except KeyError:
             raise UnattachedVolume(blockdevice_id)
 
+        for child in FilePath('/sys/bus/scsi/drivers/sd').children():
+            alu_suffix = ':{}'.format(hlu)
+            if child.basename().endswith(alu_suffix):
+                with child.child('delete').open('w') as f:
+                    f.write('1\n')
+
         rc, out = self._client.remove_volume_from_sg(str(hlu), self._group)
         if rc != 0:
             raise Exception(rc, out)
 
-        self._rescan_scsi_bus()
         self._device_path_map = self._device_path_map.remove(blockdevice_id)
         Message.new(operation=u'detach_volume_output',
                     blockdevice_id=blockdevice_id,
