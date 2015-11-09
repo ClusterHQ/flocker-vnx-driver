@@ -17,7 +17,7 @@ import random
 
 from emc_vnx_client import EMCVNXClient
 
-LUN_NAME_PREFIX = 'flocker-'
+LUN_NAME_PREFIX = 'flocker'
 
 
 def vnx_from_configuration(cluster_id, ip, pool):
@@ -63,10 +63,20 @@ class EMCVnxBlockDeviceAPI(object):
         return size/(1024*1024*1024)
 
     def _get_lun_name_from_blockdevice_id(self, blockdevice_id):
-        return LUN_NAME_PREFIX + str(blockdevice_id)
+        return (
+            LUN_NAME_PREFIX + '--' +
+            str(self._cluster_id) + '--' +
+            str(blockdevice_id)
+        )
 
     def _get_blockdevice_id_from_lun_name(self, lun_name):
-        return unicode(lun_name.split(LUN_NAME_PREFIX, 1)[1])
+        try:
+            prefix, cluster_id, blockdevice_id = lun_name.rsplit('--', 2)
+        except ValueError:
+            return None
+        if cluster_id != self._cluster_id:
+            return None
+        return blockdevice_id
 
     def create_volume(self, dataset_id, size):
         Message.new(operation=u'create_volume',
@@ -158,8 +168,8 @@ class EMCVnxBlockDeviceAPI(object):
                 )
                 break
             except Timeout:
+                import pdb; pdb.set_trace()
                 if counter > 3:
-                    import pdb; pdb.set_trace()
                     elapsed_time = time.time() - start_time
                     raise Timeout(
                         "HLU bus did not appear. "
@@ -205,8 +215,8 @@ class EMCVnxBlockDeviceAPI(object):
                 )
                 break
             except Timeout:
+                import pdb; pdb.set_trace()
                 if counter > 3:
-                    import pdb; pdb.set_trace()
                     elapsed_time = time.time() - start_time
                     raise Timeout(
                         "Device did not appear. "
@@ -290,13 +300,13 @@ class EMCVnxBlockDeviceAPI(object):
         # add luns which belong to flocker
         luns = self._client.get_all_luns()
         for each in luns:
-            if each['lun_name'].startswith(LUN_NAME_PREFIX):
+            blockdevice_id = self._get_blockdevice_id_from_lun_name(
+                each['lun_name'].decode('ascii')
+            )
+            if blockdevice_id is not None:
                 attached_to = None
                 if each['lun_id'] in lun_map:
                     attached_to = unicode(self._hostname)
-                lun_name = each['lun_name']
-                blockdevice_id = self._get_blockdevice_id_from_lun_name(
-                    lun_name)
                 size = int(1024*1024*1024*each['total_capacity_gb'])
                 vol = _blockdevicevolume_from_blockdevice_id(
                     blockdevice_id=blockdevice_id,

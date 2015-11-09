@@ -82,7 +82,8 @@ class EMCVnxBlockDeviceAPIInterfaceTests(
         make_iblockdeviceapi_tests(
             blockdevice_api_factory=(
                 lambda test_case: emcvnxblockdeviceapi_for_test(
-                    uuid4(),
+                    # XXX A hack to work around the LUN name length limit. We need a better way to store the cluster_id.
+                    unicode(uuid4()).split('-')[0],
                     test_case)
             ),
             minimum_allocatable_size=int(GiB(8).to_Byte().value),
