@@ -169,7 +169,7 @@ class EMCVnxBlockDeviceAPI(object):
                 break
             except Timeout:
                 import pdb; pdb.set_trace()
-                if counter > 3:
+                if counter > 5:
                     elapsed_time = time.time() - start_time
                     raise Timeout(
                         "HLU bus did not appear. "
@@ -216,7 +216,7 @@ class EMCVnxBlockDeviceAPI(object):
                 break
             except Timeout:
                 import pdb; pdb.set_trace()
-                if counter > 3:
+                if counter > 5:
                     elapsed_time = time.time() - start_time
                     raise Timeout(
                         "Device did not appear. "
