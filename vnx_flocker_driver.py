@@ -45,12 +45,12 @@ class EMCVnxBlockDeviceAPI(object):
     VERSION = '0.1'
     driver_name = 'VNX'
 
-    def __init__(self, cluster_id, spa_ip, storage_pool, host,
+    def __init__(self, cluster_id, spa_ip, storage_pool, hostname,
                  storage_group, naviseccli_keys):
         self._client = EMCVNXClient(spa_ip, naviseccli_keys)
         self._cluster_id = cluster_id
         self._pool = storage_pool
-        self._hostname = unicode(host)
+        self._hostname = unicode(hostname)
         self._group = unicode(storage_group)
         self._device_path_map = pmap()
 
@@ -353,7 +353,6 @@ class EMCVnxBlockDeviceAPI(object):
 
 
 def api_factory(cluster_id, **kwargs):
-    import pdb; pdb.set_trace()
     api = EMCVnxBlockDeviceAPI(cluster_id, **kwargs)
     return api
 
