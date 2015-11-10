@@ -1,6 +1,7 @@
 import os
 import time
 
+from flocker.node import BackendDescription, DeployerType
 from flocker.node.agents.blockdevice import (
     AlreadyAttachedVolume, UnknownVolume, UnattachedVolume,
     IBlockDeviceAPI, _blockdevicevolume_from_dataset_id,
@@ -18,10 +19,6 @@ import random
 from emc_vnx_client import EMCVNXClient
 
 LUN_NAME_PREFIX = 'flocker'
-
-
-def vnx_from_configuration(cluster_id, ip, pool):
-    return EMCVnxBlockDeviceAPI(cluster_id, ip, pool)
 
 
 class Timeout(Exception):
@@ -48,12 +45,13 @@ class EMCVnxBlockDeviceAPI(object):
     VERSION = '0.1'
     driver_name = 'VNX'
 
-    def __init__(self, cluster_id, ip, pool, host, group, keys):
-        self._client = EMCVNXClient(ip, keys)
+    def __init__(self, cluster_id, spa_ip, storage_pool, host,
+                 storage_group, naviseccli_keys):
+        self._client = EMCVNXClient(spa_ip, naviseccli_keys)
         self._cluster_id = cluster_id
-        self._pool = pool
+        self._pool = storage_pool
         self._hostname = unicode(host)
-        self._group = unicode(group)
+        self._group = unicode(storage_group)
         self._device_path_map = pmap()
 
     def _convert_volume_size(self, size):
@@ -352,3 +350,18 @@ class EMCVnxBlockDeviceAPI(object):
         lun_map = self._client.parse_sg_content(out)['lunmap']
         candidates = list(set(range(1, 256)) - set(lun_map.values()))
         return candidates[random.randint(0, len(candidates)-1)]
+
+
+def api_factory(cluster_id, **kwargs):
+    import pdb; pdb.set_trace()
+    api = EMCVnxBlockDeviceAPI(cluster_id, **kwargs)
+    return api
+
+
+FLOCKER_BACKEND = BackendDescription(
+    name=u"vnx_flocker_driver",
+    needs_reactor=False,
+    needs_cluster_id=True,
+    api_factory=api_factory,
+    deployer_type=DeployerType.block
+)

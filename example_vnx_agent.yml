@@ -3,6 +3,8 @@ control-service:
   hostname: "control-service"
 dataset:
   backend: "vnx_flocker_driver"
-  IP: "10.10.166.9" # SPA
-  LUN_BASE: 5000 # temporary fencing for production POC env
-  STORAGE_POOL: "ClusterHQ-Test3"
+  spa_ip: "192.168.40.13"
+  storage_pool: "Docker_Block_Pool"
+  naviseccli_keys: "/keys"
+  hostname: "esx01.ashqe"
+  storage_group: "Docker104"
