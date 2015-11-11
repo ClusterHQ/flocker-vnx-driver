@@ -63,7 +63,7 @@ class EMCVnxBlockDeviceAPI(object):
     def _get_lun_name_from_blockdevice_id(self, blockdevice_id):
         return (
             LUN_NAME_PREFIX + '--' +
-            str(self._cluster_id) + '--' +
+            str(self._cluster_id).split('-')[0] + '--' +
             str(blockdevice_id)
         )
 
@@ -72,7 +72,7 @@ class EMCVnxBlockDeviceAPI(object):
             prefix, cluster_id, blockdevice_id = lun_name.rsplit('--', 2)
         except ValueError:
             return None
-        if cluster_id != self._cluster_id:
+        if str(cluster_id).split('-')[0] != str(self._cluster_id).split('-')[0]:
             return None
         return blockdevice_id
 
