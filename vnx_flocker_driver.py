@@ -72,7 +72,10 @@ class EMCVnxBlockDeviceAPI(object):
             prefix, cluster_id, blockdevice_id = lun_name.rsplit('--', 2)
         except ValueError:
             return None
-        if str(cluster_id).split('-')[0] != str(self._cluster_id).split('-')[0]:
+        # XXX This is risky, but VNX LUN names must be <=64 characters.
+        short_lun_cluster_id = str(cluster_id).split('-')[0]
+        short_api_cluster_id = str(self._cluster_id).split('-')[0]
+        if short_lun_cluster_id != short_api_cluster_id:
             return None
         return blockdevice_id
 
