@@ -153,8 +153,14 @@ class EMCVnxBlockDeviceAPI(object):
         # XXX Often it never appears....which is a problem
         counter = 1
         start_time = time.time()
+        # XXX This will only operate on the first available FC port
+        fc_host = sorted(
+            int(f.basename()[len('host'):])
+            for f
+            in FilePath('/sys/class/fc_host').children()
+        )[0]
         hlu_bus = FilePath(
-            '/sys/class/scsi_disk/1:0:0:{}'.format(hlu)
+            '/sys/class/scsi_disk/{}:0:0:{}'.format(fc_host, hlu)
         )
         while True:
             with open(os.devnull, 'w') as discard:
