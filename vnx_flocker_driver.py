@@ -130,16 +130,28 @@ class EMCVnxBlockDeviceAPI(object):
         if lun == {}:
             raise UnknownVolume(blockdevice_id)
         alu = lun['lun_id']
-        hlu = self.choose_hlu(self._group)
 
-        rc, out = self._client.add_volume_to_sg(str(hlu),
-                                                str(alu),
-                                                self._group)
+        rc, out = self._client.get_storage_group(self._group)
         if rc != 0:
-            if rc == 66:
-                raise AlreadyAttachedVolume(blockdevice_id)
-            else:
-                raise Exception(rc, out)
+            raise Exception(rc, out)
+
+        lunmap = self._client.parse_sg_content(out)['lunmap']
+        try:
+            # The LUN has already been added to this storage group....perhaps
+            # by a previous attempt to attach in which the OS device did not
+            # appear.
+            hlu = lunmap[alu]
+        except KeyError:
+            # Add LUN to storage group
+            hlu = self.choose_hlu(self._group)
+            rc, out = self._client.add_volume_to_sg(str(hlu),
+                                                    str(alu),
+                                                    self._group)
+            if rc != 0:
+                if rc == 66:
+                    raise AlreadyAttachedVolume(blockdevice_id)
+                else:
+                    raise Exception(rc, out)
 
         volume = _blockdevicevolume_from_blockdevice_id(
             blockdevice_id=blockdevice_id,
@@ -214,6 +226,12 @@ class EMCVnxBlockDeviceAPI(object):
         new_device = FilePath('/dev').child(
             device_name_pointer.basename()
         )
+        # If the device is already attached and available on this host then the
+        # BlockDeviceDeployer miscalculated which needs to be logged as an
+        # error.
+        if device_is_usable(new_device):
+            raise AlreadyAttachedVolume(blockdevice_id)
+
         rescan_device = hlu_bus.descendant(['device', 'rescan'])
         counter = 1
         while True:
