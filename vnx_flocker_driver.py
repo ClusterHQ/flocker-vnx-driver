@@ -10,7 +10,7 @@ from flocker.node.agents.blockdevice import (
 
 from eliot import Message
 from pyrsistent import pmap
-from twisted.python.filepath import FilePath
+from twisted.python.filepath import FilePath, UnlistableError
 from zope.interface import implementer
 from subprocess import check_output, CalledProcessError
 
@@ -37,6 +37,52 @@ def wait_for(predicate, timeout):
             raise Timeout(predicate)
         else:
             time.sleep(1)
+
+
+def _fc_hosts():
+    return sorted(
+        int(f.basename()[len('host'):])
+        for f
+        in FilePath('/sys/class/fc_host').children()
+    )
+
+
+def _hlu_bus_paths(hlu):
+    return sorted(
+        FilePath(
+            '/sys/class/scsi_disk/{}:0:0:{}'.format(fc_host, hlu)
+        )
+        for fc_host in _fc_hosts()
+    )
+
+
+def _device_paths_for_hlu_bus_path(hlu_bus_path):
+    return sorted(
+        FilePath('/dev').child(
+            device_name_pointer.basename()
+        )
+        for device_name_pointer
+        in hlu_bus_path.descendant(
+            ['device', 'block']
+        ).children()
+    )
+
+
+def _device_path_is_usable(device_path):
+    try:
+        check_output(['lsblk', device_path.path])
+    except CalledProcessError:
+        return False
+    else:
+        return True
+
+
+def _directory_listable(directory):
+    try:
+        directory.children()
+    except UnlistableError:
+        return False
+    return True
 
 
 @implementer(IBlockDeviceAPI)
@@ -165,15 +211,12 @@ class EMCVnxBlockDeviceAPI(object):
         # XXX Often it never appears....which is a problem
         counter = 1
         start_time = time.time()
-        # XXX This will only operate on the first available FC port
-        fc_host = sorted(
-            int(f.basename()[len('host'):])
-            for f
-            in FilePath('/sys/class/fc_host').children()
-        )[0]
-        hlu_bus = FilePath(
-            '/sys/class/scsi_disk/{}:0:0:{}'.format(fc_host, hlu)
-        )
+        # XXX This will only operate on the first available HLU bus
+        hlu_bus_path = _hlu_bus_paths(hlu)[0]
+        # /sys/class/scsi_disks/<fc_port>:0:0:<hlu>/device/block/ contains
+        # symlinks whose names are the device names that have been allocated eg
+        # sdvb.
+        block_device_pointers = hlu_bus_path.descendant(['device', 'block'])
         while True:
             with open(os.devnull, 'w') as discard:
                 check_output(
@@ -182,7 +225,9 @@ class EMCVnxBlockDeviceAPI(object):
                 )
             try:
                 wait_for(
-                    predicate=hlu_bus.exists,
+                    predicate=lambda: _directory_listable(
+                        block_device_pointers
+                    ),
                     timeout=5 * counter
                 )
                 break
@@ -194,11 +239,11 @@ class EMCVnxBlockDeviceAPI(object):
                         "HLU bus did not appear. "
                         "Expected {}. "
                         "Waited {}s and performed {} scsi bus rescans.".format(
-                            hlu_bus,
+                            hlu_bus_path,
                             elapsed_time,
                             counter,
                         ),
-                        hlu_bus, elapsed_time, counter
+                        hlu_bus_path, elapsed_time, counter
                     )
                 else:
                     counter += 1
@@ -210,34 +255,15 @@ class EMCVnxBlockDeviceAPI(object):
         # (echo 1 > /sys/class/scsi_disk/1:0:0:219/device/rescan)
         # Nov 07 04:55:40 00009bb1a4558a12 kernel: sd 1:0:0:219: [sdup] 16777216 512-byte logical blocks: (8.58 GB/8.00 GiB)
         # Nov 07 04:55:40 00009bb1a4558a12 kernel: sdup: detected capacity change from 0 to 8589934592
-        def device_is_usable(device_path):
-            try:
-                check_output(['lsblk', device_path.path])
-            except CalledProcessError:
-                return False
-            else:
-                return True
-
         # XXX This will only operate on one of the resulting device paths.
         # /sys/class/scsi_disk/x:x:x:HLU/device/block/sdvb for example.
-        device_name_pointer = hlu_bus.descendant(
-            ['device', 'block']
-        ).children()[0]
-        new_device = FilePath('/dev').child(
-            device_name_pointer.basename()
-        )
-        # If the device is already attached and available on this host then the
-        # BlockDeviceDeployer miscalculated which needs to be logged as an
-        # error.
-        if device_is_usable(new_device):
-            raise AlreadyAttachedVolume(blockdevice_id)
-
-        rescan_device = hlu_bus.descendant(['device', 'rescan'])
+        new_device = _device_paths_for_hlu_bus_path(hlu_bus_path)[0]
+        rescan_device = hlu_bus_path.descendant(['device', 'rescan'])
         counter = 1
         while True:
             try:
                 wait_for(
-                    predicate=lambda: device_is_usable(new_device),
+                    predicate=lambda: _device_path_is_usable(new_device),
                     timeout=5 * counter
                 )
                 break
@@ -260,9 +286,6 @@ class EMCVnxBlockDeviceAPI(object):
                         f.write('1\n')
                     counter += 1
 
-        self._device_path_map = self._device_path_map.set(
-            blockdevice_id, new_device
-        )
         Message.new(
             operation=u'attach_volume_output',
             blockdevice_id=blockdevice_id,
@@ -270,7 +293,7 @@ class EMCVnxBlockDeviceAPI(object):
             lun_name=lun_name,
             alu=alu,
             hlu=hlu,
-            device_path_map=repr(self._device_path_map)
+            device_path=repr(new_device)
         ).write()
         return volume
 
@@ -304,15 +327,15 @@ class EMCVnxBlockDeviceAPI(object):
         if rc != 0:
             raise Exception(rc, out)
 
-        self._device_path_map = self._device_path_map.remove(blockdevice_id)
-        Message.new(operation=u'detach_volume_output',
-                    blockdevice_id=blockdevice_id,
-                    lun_name=lun_name,
-                    alu=alu,
-                    hlu=hlu,
-                    rc=rc,
-                    out=out,
-                    device_path_map=repr(self._device_path_map)).write()
+        Message.new(
+            operation=u'detach_volume_output',
+            blockdevice_id=blockdevice_id,
+            lun_name=lun_name,
+            alu=alu,
+            hlu=hlu,
+            rc=rc,
+            out=out,
+        ).write()
 
     def list_volumes(self):
         volumes = []
@@ -353,8 +376,27 @@ class EMCVnxBlockDeviceAPI(object):
         lun = self._client.get_lun_by_name(lun_name)
         if lun == {}:
             raise UnknownVolume(blockdevice_id)
-        device_path = self._device_path_map.get(blockdevice_id)
-        if device_path is None:
+
+        alu = lun['lun_id']
+
+        rc, out = self._client.get_storage_group(self._group)
+        if rc != 0:
+            raise Exception(rc, out)
+        lunmap = self._client.parse_sg_content(out)['lunmap']
+        try:
+            # The LUN has already been added to this storage group....perhaps
+            # by a previous attempt to attach in which the OS device did not
+            # appear.
+            hlu = lunmap[alu]
+        except KeyError:
+            raise UnattachedVolume(blockdevice_id)
+        hlu_bus_path = _hlu_bus_paths(hlu)[0]
+
+        # XXX This will only operate on one of the resulting device paths.
+        # /sys/class/scsi_disk/x:x:x:HLU/device/block/sdvb for example.
+        device_path = _device_paths_for_hlu_bus_path(hlu_bus_path)[0]
+
+        if not _device_path_is_usable(device_path):
             raise UnattachedVolume(blockdevice_id)
         Message.new(operation=u'get_device_path_output',
                     blockdevice_id=blockdevice_id,
