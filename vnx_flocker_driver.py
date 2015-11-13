@@ -206,9 +206,11 @@ class EMCVnxBlockDeviceAPI(object):
             else:
                 return True
 
-        [device_name_pointer] = hlu_bus.descendant(
+        # XXX This will only operate on one of the resulting device paths.
+        # /sys/class/scsi_disk/x:x:x:HLU/device/block/sdvb for example.
+        device_name_pointer = hlu_bus.descendant(
             ['device', 'block']
-        ).children()
+        ).children()[0]
         new_device = FilePath('/dev').child(
             device_name_pointer.basename()
         )
