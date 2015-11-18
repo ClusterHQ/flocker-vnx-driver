@@ -1,5 +1,4 @@
-# Copyright ClusterHQ Inc.
-# See LICENSE file for details.
+# Copyright ClusterHQ Inc.  See LICENSE file for details.
 
 from setuptools import setup, find_packages
 import codecs  # To use a consistent encoding
