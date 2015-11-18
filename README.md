@@ -11,7 +11,6 @@ Install naviseccli: https://github.com/emc-openstack/naviseccli/blob/master/navi
 
 ### sg3_utils
 
-
 Get sg3_utils for ``rescan-scsi-bus``.
 
 #### Ubuntu
