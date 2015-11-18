@@ -11,7 +11,7 @@ with open("dev-requirements.txt") as dev_requirements:
 
 
 setup(
-    name='flocker_vnx_driver',
+    name='flocker_emc_vnx_driver',
     version='0.1',
     description='EMC VNX Backend Plugin for ClusterHQ/Flocker ',
     long_description=long_description,
@@ -30,7 +30,7 @@ setup(
     ],
 
     keywords='backend, plugin, flocker, docker, python',
-    packages=find_packages(exclude=['test*']),
+    packages=find_packages(),
     install_requires=install_requires,
     extras_require={
         "dev": dev_requires,
