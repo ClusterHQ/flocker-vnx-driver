@@ -1,15 +1,18 @@
 # Copyright ClusterHQ Inc.  See LICENSE file for details.
 
 from setuptools import setup, find_packages
-import codecs  # To use a consistent encoding
 
-# Get the long description from the relevant file
-with codecs.open('DESCRIPTION.rst', encoding='utf-8') as f:
-    long_description = f.read()
+with open('DESCRIPTION.rst') as description:
+    long_description = description.read()
+with open("requirements.txt") as requirements:
+    install_requires = requirements.readlines()
+with open("dev-requirements.txt") as dev_requirements:
+    dev_requires = dev_requirements.readlines()
+
 
 setup(
-    name='vnx_flocker_driver',
-    version='1.0',
+    name='flocker_vnx_driver',
+    version='0.1',
     description='EMC VNX Backend Plugin for ClusterHQ/Flocker ',
     long_description=long_description,
     author='Madhuri Yechuri',
@@ -22,16 +25,14 @@ setup(
         'Intended Audience :: System Administrators',
         'Intended Audience :: Developers',
         'Topic :: Software Development :: Libraries :: Python Modules',
-
         'License :: OSI Approved :: Apache Software License',
-
-        # Python versions supported
         'Programming Language :: Python :: 2.7',
     ],
 
     keywords='backend, plugin, flocker, docker, python',
     packages=find_packages(exclude=['test*']),
-    install_requires=[''],
-    data_files=[('/etc/flocker/', ['example_vnx_agent.yml']),
-                ('/etc/flocker/', ['config.yml'])]
+    install_requires=install_requires,
+    extras_require={
+        "dev": dev_requires,
+    },
 )
