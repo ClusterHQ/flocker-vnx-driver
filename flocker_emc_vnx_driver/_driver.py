@@ -434,7 +434,7 @@ def api_factory(cluster_id, **kwargs):
 
 
 FLOCKER_BACKEND = BackendDescription(
-    name=u"vnx_flocker_driver",
+    name=u"emc_vnx",
     needs_reactor=False,
     needs_cluster_id=True,
     api_factory=api_factory,
