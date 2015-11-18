@@ -4,7 +4,10 @@ import time
 from flocker.node import BackendDescription, DeployerType
 from flocker.node.agents.blockdevice import (
     AlreadyAttachedVolume, UnknownVolume, UnattachedVolume,
-    IBlockDeviceAPI, _blockdevicevolume_from_dataset_id,
+    IBlockDeviceAPI,
+)
+from flocker.node.agents.loopback import (
+    _blockdevicevolume_from_dataset_id,
     _blockdevicevolume_from_blockdevice_id,
 )
 
@@ -16,7 +19,7 @@ from subprocess import check_output, CalledProcessError
 
 import random
 
-from emc_vnx_client import EMCVNXClient
+from ._emc_vnx_client import EMCVNXClient
 
 LUN_NAME_PREFIX = 'flocker'
 

@@ -14,9 +14,7 @@ from uuid import uuid4
 
 from bitmath import GiB
 
-from flocker.testtools import skip_except
-
-from vnx_flocker_driver import EMCVnxBlockDeviceAPI
+from .. import EMCVnxBlockDeviceAPI
 
 from flocker.node.agents.test.test_blockdevice import (
     make_iblockdeviceapi_tests, detach_destroy_volumes
@@ -46,38 +44,6 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
     return api
 
 
-# We could remove this, all tests are covered
-@skip_except(
-    supported_tests=[
-        'test_interface',
-        'test_created_is_listed',
-        'test_list_volume_empty',
-        'test_listed_volume_attributes',
-        'test_created_volume_attributes',
-        'test_destroy_unknown_volume',
-        'test_destroy_volume',
-        'test_destroy_destroyed_volume',
-        'test_attach_unknown_volume',
-        'test_attach_attached_volume',
-        'test_attach_elsewhere_attached_volume',
-        'test_attach_unattached_volume',
-        'test_attached_volume_listed',
-        'test_list_attached_and_unattached',
-        'test_multiple_volumes_attached_to_host',
-        'test_detach_unknown_volume',
-        'test_detach_detached_volume',
-        'test_detach_volume',
-        'test_reattach_detached_volume',
-        'test_attach_destroyed_volume',
-        'test_get_device_path_unknown_volume',
-        'test_get_device_path_unattached_volume',
-        'test_get_device_path_device',
-        'test_get_device_path_device_repeatable_results',
-        'test_device_size',
-        'test_compute_instance_id_nonempty',
-        'test_compute_instance_id_unicode'
-    ]
-)
 class EMCVnxBlockDeviceAPIInterfaceTests(
         make_iblockdeviceapi_tests(
             blockdevice_api_factory=(
