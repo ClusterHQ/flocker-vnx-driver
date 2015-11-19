@@ -33,12 +33,12 @@ def emcvnxblockdeviceapi_for_test(cluster_id, test_case):
     """
     config_file_path = os.environ.get('VNX_CONFIG_FILE')
     config_file = open(config_file_path)
-    config = yaml.load(config_file.read())
-    ip = config['IP']
-    pool = config['STORAGE_POOL']
-    keys = config['NAVISECCLI_KEYS']
-    group = config['STORAGE_GROUP']
-    host = config['HOSTNAME']
+    config = yaml.load(config_file.read())['dataset']
+    ip = config['spa_ip']
+    pool = config['storage_pool']
+    keys = config['naviseccli_keys']
+    group = config['storage_group']
+    host = config['hostname']
     api = EMCVnxBlockDeviceAPI(cluster_id, ip, pool, host, group, keys)
     test_case.addCleanup(detach_destroy_volumes, api)
     return api

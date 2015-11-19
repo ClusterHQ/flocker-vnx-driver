@@ -24,6 +24,6 @@ RUN dpkg -i navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
 
 RUN git clone https://github.com/ClusterHQ/flocker-vnx-driver.git /flocker-vnx-driver
 RUN pip install --editable /flocker-vnx-driver
-ENV VNX_CONFIG_FILE /flocker-vnx-driver/config.yml
+ENV VNX_CONFIG_FILE /flocker-vnx-driver/agent.yml.example
 ENTRYPOINT ["/usr/local/bin/trial"]
 CMD ["flocker_emc_vnx_driver"]

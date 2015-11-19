@@ -28,7 +28,7 @@ python setup.py install
 Set VNX_CONFIG_FILE:
 
 ```
-root@sclf200:~/flocker-vnx-driver# export VNX_CONFIG_FILE=/home/ctoguest/flocker-vnx-driver/config.yml
+# export VNX_CONFIG_FILE=/flocker-vnx-driver/agent.yml.example
 ```
 
 ### Test inside a Docker container
