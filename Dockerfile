@@ -2,7 +2,7 @@
 # Utility for testing VNX driver from inside a container
 
 FROM ubuntu:14.04
-MAINTAINER Madhuri Yechuri <madhuri.yechuri@clusterhq.com>
+MAINTAINER ClusterHQ <contact@clusterhq.com>
 
 RUN sudo apt-get update
 RUN sudo apt-get -y install apt-transport-https software-properties-common
