@@ -1,7 +1,14 @@
 # Copyright ClusterHQ Inc.  See LICENSE file for details.
 
 import os
+from subprocess import check_output, CalledProcessError
 import time
+import random
+
+from eliot import Message
+from pyrsistent import pmap
+from twisted.python.filepath import FilePath, UnlistableError
+from zope.interface import implementer
 
 from flocker.node import BackendDescription, DeployerType
 from flocker.node.agents.blockdevice import (
@@ -12,14 +19,6 @@ from flocker.node.agents.loopback import (
     _blockdevicevolume_from_dataset_id,
     _blockdevicevolume_from_blockdevice_id,
 )
-
-from eliot import Message
-from pyrsistent import pmap
-from twisted.python.filepath import FilePath, UnlistableError
-from zope.interface import implementer
-from subprocess import check_output, CalledProcessError
-
-import random
 
 from ._emc_vnx_client import EMCVNXClient
 
