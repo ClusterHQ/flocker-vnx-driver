@@ -3,46 +3,97 @@ EMC VNX driver for Flocker.
 
 This driver is tested on Ubuntu 14.04.
 
-## Prereqs
+## Prerequisites
+
+### Flocker
+
+See https://docs.clusterhq.com/en/1.7.2/install
+
+### SCSI Utilities
+
+```
+apt-get install \
+      sg3-utils \
+      scsitools \
+      lsscsi
+```
 
 ### Naviseccli
 
-Install naviseccli: https://github.com/emc-openstack/naviseccli/blob/master/navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
-
-### sg3_utils
-
-Get sg3_utils for ``rescan-scsi-bus``.
-
-#### Ubuntu
-
-apt-get install sg3-utils
-
-### Install driver
+Install the CLI.
 
 ```
-python setup.py install
+wget https://github.com/emc-openstack/naviseccli/raw/master/navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
+dpkg -i navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
+```
+
+Create credential files.
+
+```
+/opt/Navisphere/bin/naviseccli \
+       -secfilepath /keys \
+       -h 192.168.40.13 \
+       -AddUserSecurity \
+       -Scope 0 \
+       -user <VNX_USERNAME> \
+       -password <VNX_PASSWORD>
+```
+
+
+## Install driver
+
+```
+# /opt/flocker/bin/pip install git+https://github.com/ClusterHQ/flocker-vnx-driver.git
 ```
 
 ## Standalone Test Setup
 
-Set VNX_CONFIG_FILE:
-
 ```
-# export VNX_CONFIG_FILE=/flocker-vnx-driver/agent.yml.example
+# export VNX_CONFIG_FILE=/etc/flocker/agent.yml
+# /opt/flocker/bin/trial flocker_emc_vnx_driver
 ```
 
 ### Test inside a Docker container
 
-Build and start a container for unit testing.  Mount naviseccli security keys path into container.
+Build a Docker image for functional testing.
 
 ```
-$ ls -la /home/core/navisecclisec
-total 16
-drwxr-xr-x 2 core core 4096 Nov  2 06:38 .
-drwxr-xr-x 7 core core 4096 Oct 29 02:34 ..
--rw-r--r-- 1 root root  288 Nov  2 06:38 SecuredCLISecurityFile.xml
--rw-r--r-- 1 root root   48 Nov  2 06:38 SecuredCLIXMLEncrypted.key
-$ docker build -t myechuri/vnxtest .
-$ docker run --privileged -v /:/host -v /home/core/myechuri:/root -v /home/core/navisecclisec:/keys -v /dev:/dev -ti myechuri/vnxtest
-root@0a290220ae82:/flocker-vnx-driver# trial test_emc_vnx.EMCVnxBlockDeviceAPIInterfaceTests.test_interface
+$ docker build --tag=clusterhq/flocker-vnx-driver .
+```
+
+Create ``naviseccli`` credentials
+
+```
+docker run \
+       --rm \
+       --net host \
+       --volume /home/core/navisecclisec:/keys \
+       --entrypoint /opt/Navisphere/bin/naviseccli \
+       clusterhq/flocker-vnx-driver \
+       -secfilepath /keys \
+       -h 192.168.40.13 \
+       -AddUserSecurity \
+       -Scope 0 \
+       -user <VNX_USERNAME> \
+       -password <VNX_PASSWORD>
+```
+
+```
+ls -1 /home/core/navisecclisec
+SecuredCLISecurityFile.xml
+SecuredCLIXMLEncrypted.key
+```
+
+Run the tests in a container.
+Mount naviseccli security keys path into container.
+
+```
+$ docker run \
+       --rm \
+       --privileged \
+       --net host
+       --volume /dev:/dev \
+       --volume /home/core/navisecclisec:/keys \
+       --volume $PWD/flocker-vnx-driver:/flocker-vnx-driver \
+       clusterhq/flocker-vnx-driver
 ```
