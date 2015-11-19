@@ -12,16 +12,18 @@ RUN sudo apt-get -y --force-yes install \
       python-dev \
       libffi-dev \
       libssl-dev
+RUN pip install git+https://github.com/ClusterHQ/flocker.git@1.7.2
+
+RUN sudo apt-get -y --force-yes install \
       sg3-utils \
       scsitools \
       lsscsi \
-
-RUN wget https://github.com/emc-openstack/naviseccli/raw/master/navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
+      wget
+RUN wget --quiet https://github.com/emc-openstack/naviseccli/raw/master/navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
 RUN dpkg -i navicli-linux-64-x86-en-us_7.33.2.0.51-1_all.deb
 
-RUN pip install git+https://github.com/ClusterHQ/flocker.git@1.7.2
-
 RUN git clone https://github.com/ClusterHQ/flocker-vnx-driver.git /flocker-vnx-driver
+RUN pip install --editable /flocker-vnx-driver
 ENV VNX_CONFIG_FILE /flocker-vnx-driver/config.yml
 ENTRYPOINT ["/usr/local/bin/trial"]
 CMD ["flocker_emc_vnx_driver"]
