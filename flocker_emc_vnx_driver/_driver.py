@@ -221,6 +221,13 @@ class EMCVnxBlockDeviceAPI(object):
         # symlinks whose names are the device names that have been allocated eg
         # sdvb.
         block_device_pointers = hlu_bus_path.descendant(['device', 'block'])
+
+        # Do an early check to see if the device is already present.
+        if _directory_listable(block_device_pointers):
+            new_device = _device_paths_for_hlu_bus_path(hlu_bus_path)[0]
+            if _device_path_is_usable(new_device):
+                raise AlreadyAttachedVolume(blockdevice_id)
+
         while True:
             with open(os.devnull, 'w') as discard:
                 check_output(
