@@ -1,10 +1,10 @@
 version: 1
 control-service:
-  hostname: "control-service"
+  hostname: "<IP address of Flocker control service>"
 dataset:
-  backend: "vnx_flocker_driver"
-  spa_ip: "192.168.40.13"
-  storage_pool: "Docker_Block_Pool"
-  naviseccli_keys: "/keys"
-  hostname: "esx01.ashqe"
-  storage_group: "Docker104"
+  backend: "emc_vnx"
+  spa_ip: "<IP address of SPA port>"
+  storage_pool: "<Name of VNX storage pool>"
+  naviseccli_keys: "</path/to/naviseccli/cached/keys>"
+  hostname: "<Hostname of this node on the VNX storage switch>"
+  storage_group: "<Name of VNX storage group in which this node is registered>"
