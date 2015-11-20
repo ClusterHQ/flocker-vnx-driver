@@ -58,42 +58,34 @@ Create credential files.
 Build a Docker image for functional testing.
 
 ```
-$ docker build --tag=clusterhq/flocker-vnx-driver .
+$ docker build --tag=clusterhq/flocker-vnx-driver-test-runner .
 ```
 
 Create ``naviseccli`` credentials
 
 ```
-docker run \
-       --rm \
+docker run --rm \
        --net host \
-       --volume /home/core/navisecclisec:/keys \
-       --entrypoint /opt/Navisphere/bin/naviseccli \
-       clusterhq/flocker-vnx-driver \
-       -secfilepath /keys \
-       -h 192.168.40.13 \
-       -AddUserSecurity \
-       -Scope 0 \
-       -user <VNX_USERNAME> \
-       -password <VNX_PASSWORD>
+       --volume $HOME/etc_flocker/keys:/keys \
+       clusterhq/naviseccli \
+       -addusersecurity -scope 0 -user <USER> -password <PASSWORD>
 ```
 
 ```
-ls -1 /home/core/navisecclisec
+ls -1 /home/core/etc_flocker/keys
 SecuredCLISecurityFile.xml
 SecuredCLIXMLEncrypted.key
 ```
 
 Run the tests in a container.
-Mount naviseccli security keys path into container.
 
 ```
-$ docker run \
+docker run \
        --rm \
+       --net host \
        --privileged \
-       --net host
        --volume /dev:/dev \
-       --volume /home/core/navisecclisec:/keys \
-       --volume $PWD/flocker-vnx-driver:/flocker-vnx-driver \
-       clusterhq/flocker-vnx-driver
+       --volume /home/core/etc_flocker:/etc/flocker \
+       --env VNX_CONFIG_FILE=/etc/flocker/agent.yml \
+       clusterhq/flocker-vnx-driver-test-runner
 ```
