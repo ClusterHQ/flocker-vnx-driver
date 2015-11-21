@@ -8,6 +8,7 @@ using a VNX cluster.
 """
 
 import os
+import re
 import sys
 import yaml
 from uuid import uuid4
@@ -85,4 +86,31 @@ class EMCVnxBlockDeviceAPIInterfaceTests(
             dataset_id=uuid4(), size=self.minimum_allocatable_size
         )
         # Attach volume to some other StorageGroup using _emc_vnx_client
+        lun_name = self.api._get_lun_name_from_blockdevice_id(
+            volume.blockdevice_id
+        )
+        alu = self.api._client.get_lun_by_name(lun_name)['lun_id']
+        storage_groups = self.api._client.storage_groups()
+        foreign_storage_group_name, foreign_storage_group = [
+            (group_name, group)
+            for group_name, group in storage_groups.items()
+            if group_name != self.api._group
+            and re.match(r'Docker\d+', group_name)
+        ][0]
+        hlu = self.api._choose_hlu(
+            foreign_storage_group['lunmap']
+        )
+        rc, out = self.api._client.add_volume_to_sg(
+            str(hlu), str(alu), foreign_storage_group_name
+        )
+        if rc == 0:
+            self.addCleanup(
+                lambda: self.api._client.remove_volume_from_sg(
+                    str(hlu),
+                    foreign_storage_group_name
+                )
+            )
+        else:
+            raise Exception(rc, out)
+
         self.assertEqual([], self.api.list_volumes())

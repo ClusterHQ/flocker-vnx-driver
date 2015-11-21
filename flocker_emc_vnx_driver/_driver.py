@@ -1,6 +1,7 @@
 # Copyright ClusterHQ Inc.  See LICENSE file for details.
 
 import os
+import re
 from subprocess import check_output, CalledProcessError
 import time
 import random
@@ -193,7 +194,7 @@ class EMCVnxBlockDeviceAPI(object):
             hlu = lunmap[alu]
         except KeyError:
             # Add LUN to storage group
-            hlu = self.choose_hlu(self._group)
+            hlu = self._choose_hlu(lunmap)
             rc, out = self._client.add_volume_to_sg(str(hlu),
                                                     str(alu),
                                                     self._group)
@@ -346,26 +347,45 @@ class EMCVnxBlockDeviceAPI(object):
             out=out,
         ).write()
 
+    def _attached_luns(self):
+        storage_groups = self._client.storage_groups()
+        lun_to_group = {}
+        for group_name, group in storage_groups.items():
+            if not re.match(r'Docker\d+', group_name):
+                continue
+            for alu, hlu in group['lunmap'].items():
+                if alu in lun_to_group:
+                    raise Exception(
+                        group_name,
+                        group['lunmap'],
+                        alu,
+                        hlu,
+                        lun_to_group
+                    )
+                lun_to_group[alu] = (group_name, group)
+        return lun_to_group
+
     def list_volumes(self):
         volumes = []
-
-        # get lun_map of this node
-        rc, out = self._client.get_storage_group(self._group)
-        if rc != 0:
-            raise Exception(rc, out)
-
-        lun_map = self._client.parse_sg_content(out)['lunmap']
-
-        # add luns which belong to flocker
         luns = self._client.get_all_luns()
+        attached_luns = self._attached_luns()
         for each in luns:
+            lun_id = each['lun_id']
             blockdevice_id = self._get_blockdevice_id_from_lun_name(
                 each['lun_name'].decode('ascii')
             )
             if blockdevice_id is not None:
                 attached_to = None
-                if each['lun_id'] in lun_map:
-                    attached_to = unicode(self._hostname)
+                try:
+                    group_name, group = attached_luns[lun_id]
+                except KeyError:
+                    pass
+                else:
+                    if group_name == self._group:
+                        attached_to = unicode(self._hostname)
+                    else:
+                        # Don't report volumes attached to other nodes.
+                        continue
                 size = int(1024*1024*1024*each['total_capacity_gb'])
                 vol = _blockdevicevolume_from_blockdevice_id(
                     blockdevice_id=blockdevice_id,
@@ -423,11 +443,7 @@ class EMCVnxBlockDeviceAPI(object):
                     hostname=self._hostname).write()
         return self._hostname
 
-    def choose_hlu(self, sg_name):
-        rc, out = self._client.get_storage_group(sg_name)
-        if rc != 0:
-            raise Exception(rc, out)
-        lun_map = self._client.parse_sg_content(out)['lunmap']
+    def _choose_hlu(self, lun_map):
         candidates = list(set(range(1, 256)) - set(lun_map.values()))
         return candidates[random.randint(0, len(candidates)-1)]
 

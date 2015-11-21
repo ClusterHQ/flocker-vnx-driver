@@ -164,14 +164,27 @@ class EMCVNXClient(object):
         rc, out, err = execute(*(self.cli + cmd))
         return rc, out
 
+    def storage_groups(self):
+        cmd = ('storagegroup', '-list', '-host', '-iscsiAttributes')
+        rc, out, err = execute(*(self.cli + cmd))
+        if rc != 0:
+            raise Exception(rc, out, err)
+        groups = {}
+        for group_content in out.split('Storage Group Name:    '):
+            group_name, group_content = group_content.split('\n', 1)
+            group_name = group_name.strip()
+            group_info = self.parse_sg_content(group_content)
+            groups[group_name] = group_info
+        return groups
+
     def parse_sg_content(self, content):
         lun_map = {}
         data = {'storage_group_uid': None,
                 'lunmap': lun_map,
                 'raw_output': ''}
         data['raw_output'] = content
-        re_stroage_group_id = 'Storage Group UID:\s*(.*)\s*'
-        m = re.search(re_stroage_group_id, content)
+        re_storage_group_id = 'Storage Group UID:\s*(.*)\s*'
+        m = re.search(re_storage_group_id, content)
         if m is not None:
             data['storage_group_uid'] = m.group(1)
 
