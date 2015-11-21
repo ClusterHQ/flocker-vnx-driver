@@ -347,13 +347,13 @@ class EMCVnxBlockDeviceAPI(object):
             out=out,
         ).write()
 
-    def _attached_luns(self):
+    def _lun_storagegroup_map(self, cluster_lun_ids):
         storage_groups = self._client.storage_groups()
         lun_to_group = {}
         for group_name, group in storage_groups.items():
-            if not re.match(r'Docker\d+', group_name):
-                continue
             for alu, hlu in group['lunmap'].items():
+                if alu not in cluster_lun_ids:
+                    continue
                 if alu in lun_to_group:
                     raise Exception(
                         group_name,
@@ -365,37 +365,51 @@ class EMCVnxBlockDeviceAPI(object):
                 lun_to_group[alu] = (group_name, group)
         return lun_to_group
 
+    def _cluster_luns(self):
+        cluster_luns = []
+        for lun in self._client.get_all_luns():
+            blockdevice_id = self._get_blockdevice_id_from_lun_name(
+                lun['lun_name'].decode('ascii')
+            )
+            if blockdevice_id is not None:
+                cluster_luns.append(lun)
+        return cluster_luns
+
     def list_volumes(self):
         volumes = []
-        luns = self._client.get_all_luns()
-        attached_luns = self._attached_luns()
-        for each in luns:
+        cluster_luns = self._cluster_luns()
+        lun_storage_group_map = self._lun_storagegroup_map(cluster_luns)
+        for each in cluster_luns:
             lun_id = each['lun_id']
             blockdevice_id = self._get_blockdevice_id_from_lun_name(
                 each['lun_name'].decode('ascii')
             )
-            if blockdevice_id is not None:
-                attached_to = None
-                try:
-                    group_name, group = attached_luns[lun_id]
-                except KeyError:
-                    pass
+
+            attached_to = None
+            try:
+                group_name, group = lun_storage_group_map[lun_id]
+            except KeyError:
+                # LUN is not attached anywhere.
+                pass
+            else:
+                if group_name == self._group:
+                    # LUN attached here.
+                    attached_to = unicode(self._hostname)
                 else:
-                    if group_name == self._group:
-                        attached_to = unicode(self._hostname)
-                    else:
-                        # Don't report volumes attached to other nodes.
-                        continue
-                size = int(1024*1024*1024*each['total_capacity_gb'])
-                vol = _blockdevicevolume_from_blockdevice_id(
-                    blockdevice_id=blockdevice_id,
-                    size=size,
-                    attached_to=attached_to)
-                Message.new(operation=u'list_volumes_output',
-                            blockdevice_id=blockdevice_id,
-                            size=size,
-                            attached_to=attached_to).write()
-                volumes.append(vol)
+                    # Lun attached elsewhere.
+                    # Don't list it.
+                    continue
+
+            size = int(1024*1024*1024*each['total_capacity_gb'])
+            vol = _blockdevicevolume_from_blockdevice_id(
+                blockdevice_id=blockdevice_id,
+                size=size,
+                attached_to=attached_to)
+            Message.new(operation=u'list_volumes_output',
+                        blockdevice_id=blockdevice_id,
+                        size=size,
+                        attached_to=attached_to).write()
+            volumes.append(vol)
         return volumes
 
     def get_device_path(self, blockdevice_id):
