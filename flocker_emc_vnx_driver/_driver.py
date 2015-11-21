@@ -378,7 +378,9 @@ class EMCVnxBlockDeviceAPI(object):
     def list_volumes(self):
         volumes = []
         cluster_luns = self._cluster_luns()
-        lun_storage_group_map = self._lun_storagegroup_map(cluster_luns)
+        lun_storage_group_map = self._lun_storagegroup_map(
+            cluster_lun_ids=[l['lun_id'] for l in cluster_luns]
+        )
         for each in cluster_luns:
             lun_id = each['lun_id']
             blockdevice_id = self._get_blockdevice_id_from_lun_name(
