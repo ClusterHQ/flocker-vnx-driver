@@ -2,7 +2,7 @@ version: 1
 control-service:
   hostname: "<IP address of Flocker control service>"
 dataset:
-  backend: "emc_vnx"
+  backend: "flocker_emc_vnx_driver"
   spa_ip: "<IP address of SPA port>"
   storage_pool: "<Name of VNX storage pool>"
   naviseccli_keys: "</path/to/naviseccli/cached/keys>"
