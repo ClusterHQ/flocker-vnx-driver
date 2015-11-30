@@ -16,6 +16,7 @@ from uuid import uuid4
 from bitmath import GiB
 
 from .. import EMCVnxBlockDeviceAPI
+from .._driver import UNKNOWN_COMPUTE_ID
 
 from flocker.node.agents.test.test_blockdevice import (
     make_iblockdeviceapi_tests, detach_destroy_volumes
@@ -49,7 +50,8 @@ class EMCVnxBlockDeviceAPIInterfaceTests(
         make_iblockdeviceapi_tests(
             blockdevice_api_factory=(
                 lambda test_case: emcvnxblockdeviceapi_for_test(
-                    # XXX A hack to work around the LUN name length limit. We need a better way to store the cluster_id.
+                    # XXX A hack to work around the LUN name length limit. We
+                    # need a better way to store the cluster_id.
                     unicode(uuid4()).split('-')[0],
                     test_case)
             ),
@@ -63,23 +65,8 @@ class EMCVnxBlockDeviceAPIInterfaceTests(
     """
     def test_list_foreign_attachments(self):
         """
-        A node can see that a LUN has been added to another storage group but
-        that's all.  It can't know whether the host in that foreign storage
-        group has created a device for the LUN.  As far as we know, it's
-        non-manifest.  But problems occure if we report it as non-manifest and
-        our BlockDeviceDeployer reports it as a non-manifest volume in the
-        NodeState.  The control service ends up seeing and reporting a
-        DeployementState where a dataset is both manifest on the other node and
-        non-manifest.  This would be fixed if there was a remote dataset agent,
-        responsible for creating, remote_attach, remote_detach, delete.  And a
-        local dataset agent responsible for detecting and assigning a device
-        path to the volume on the host.
-
-        There are two possible workarounds:
-         * List the volume as attached to a random non-local compute_id...the
-           local deployer only reports the state of locally attached and
-           non-manifest datasets.
-         * Don't list volumes which appear to be attached to other nodes.
+        ``BlockDeviceVolume.attached_to`` is set to ``UNKNOWN_COMPUTE_ID`` for
+        volumes that are attached to other nodes.
         """
         # Create the volume we'll detach.
         volume = self.api.create_volume(
@@ -113,4 +100,7 @@ class EMCVnxBlockDeviceAPIInterfaceTests(
         else:
             raise Exception(rc, out)
 
-        self.assertEqual([], self.api.list_volumes())
+        self.assertEqual(
+            [volume.set('attached_to', UNKNOWN_COMPUTE_ID)],
+            self.api.list_volumes()
+        )

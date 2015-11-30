@@ -24,6 +24,7 @@ from flocker.node.agents.loopback import (
 from ._emc_vnx_client import EMCVNXClient
 
 LUN_NAME_PREFIX = 'flocker'
+UNKNOWN_COMPUTE_ID = u'unknown-compute-id'
 
 
 class Timeout(Exception):
@@ -399,8 +400,20 @@ class EMCVnxBlockDeviceAPI(object):
                     attached_to = unicode(self._hostname)
                 else:
                     # Lun attached elsewhere.
-                    # Don't list it.
-                    continue
+                    # A node can see that a LUN has been added to another
+                    # storage group but that's all.  It can't know whether the
+                    # host in that foreign storage group has created a device
+                    # for the LUN.  As far as it knows, it's non-manifest.  But
+                    # problems occur because our BlockDeviceDeployer reports it
+                    # as a non-manifest volume in the NodeState.  The control
+                    # service ends up seeing and reporting a DeployementState
+                    # where a dataset is both manifest on the other node and
+                    # non-manifest.
+                    # The workarounds for now is to list the volume as attached
+                    # to a non-existent compute_id. This only works because the
+                    # local deployer only reports the state of locally attached
+                    # and non-manifest datasets.
+                    attached_to = UNKNOWN_COMPUTE_ID
 
             size = int(1024*1024*1024*each['total_capacity_gb'])
             vol = _blockdevicevolume_from_blockdevice_id(
