@@ -166,11 +166,23 @@ class EMCVnxBlockDeviceAPI(object):
                     lun_name=lun_name,
                     rc=rc,
                     out=out).write()
-        if rc != 0:
+        retry_attempt = 0
+        max_retries = 3
+        while rc != 0 and retry_attempt < max_retries:
             if rc == 9:
                 raise UnknownVolume(blockdevice_id)
-            else:
-                raise Exception(rc, out)
+            elif rc == 8:
+                time.sleep(1)
+                retry_attempt = retry_attempt + 1
+                rc, out = self._client.destroy_volume(lun_name)
+                Message.new(operation=u'destroy_volume_output',
+                            retry_attempt=retry_attempt,
+                            blockdevice_id=blockdevice_id,
+                            lun_name=lun_name,
+                            rc=rc,
+                            out=out).write()
+        if rc != 0 and retry_attempt == max_retries: 
+            raise Exception(rc, out)
 
     def attach_volume(self, blockdevice_id, attach_to):
         Message.new(operation=u'attach_volume',
